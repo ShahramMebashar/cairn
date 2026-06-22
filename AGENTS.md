@@ -6,9 +6,10 @@ else. See `SPEC.md` for the frozen contract and `docs/` for guides.
 
 **We dogfood: this repo's own work is tracked in cairn.** Read
 [.cairn/WORKFLOW.md](.cairn/WORKFLOW.md) before starting a task — it defines the lifecycle,
-the agent loop (claim → in_progress → build → note → run_checks → done), and the note
-discipline. Add concise provenance notes (`note`) as you make decisions; log tool friction
-in that file's friction log.
+the agent loop (claim → in_progress → build → note → run_checks → done), the note
+discipline, and the **task body style** (concise, structured Markdown — short `##` sections,
+inline code for identifiers — that reads well for humans and agents). Add concise provenance
+notes (`note`) as you make decisions; log tool friction in that file's friction log.
 
 ## Backend (Go)
 

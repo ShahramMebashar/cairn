@@ -47,3 +47,23 @@ if every entry restates the obvious, you over-noted.
   a command can't verify. A task carrying a pending manual check parks until it's attested.
 - **Deps** — wire real ordering so `ready` means it. Deps must already exist at create time.
 - Ids are engine-assigned and **monotonic** — deleting a task file never recycles its id.
+
+### Body style
+
+Write for the next reader — human or agent. Be concise and token-efficient, but structured:
+
+- Open with **one line** of intent (what + why), no heading.
+- Add short `##` sections only when the task has real structure — e.g. **Scope**,
+  **Dependencies**, **Acceptance**. Skip them for small tasks.
+- Use `inline code` for identifiers, paths, and symbols (`OrderTotals`, `src/x.go`, `quote()`).
+- Prefer tight bullets over paragraphs. Link specs; don't restate them.
+
+```md
+Real delivery pricing on the flat `Order.shipping` field.
+
+## Scope
+- Tables: `shipping_zones`, `shipping_rates`. Public: `ShippingRateCalculator`.
+
+## Dependencies
+- Prereq `Orders\Public` totals; **blocks** Notifications.
+```
