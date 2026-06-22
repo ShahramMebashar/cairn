@@ -1,6 +1,7 @@
 // Typed client for the cairn web API. Every call targets a project `path`; the server
 // resolves it (falling back to its launch --repo) and reuses mcp.Service, so the web and
 // agent front-ends share one rule-set.
+import { currentActor } from "@/lib/identity";
 
 export type Check = {
   desc: string;
@@ -57,6 +58,7 @@ export type Status = {
   closed?: string[];
   initial?: string;
   actor?: string;
+  suggestedActor?: string;
 };
 
 export type CreateInput = {
@@ -72,9 +74,13 @@ export type CreateInput = {
 const enc = encodeURIComponent;
 
 async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  const actor = currentActor();
+  if (actor) headers["X-Cairn-Actor"] = enc(actor); // who I am (URL-encoded for non-ASCII)
   const res = await fetch(url, {
     method,
-    headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
+    headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();

@@ -11,9 +11,10 @@ import {
 } from "@xyflow/react";
 import dagre from "@dagrejs/dagre";
 import "@xyflow/react/dist/style.css";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Network } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusIcon } from "@/components/StatusIcon";
+import { EmptyState } from "@/components/EmptyState";
 import { useTasks } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 import type { Status, Task } from "@/lib/api";
@@ -106,18 +107,26 @@ export function Graph({
         <span className="text-xs text-muted-foreground">{nodes.length} tasks</span>
       </header>
       <div className="min-h-0 flex-1">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          nodeTypes={nodeTypes}
-          fitView
-          proOptions={{ hideAttribution: true }}
-          onNodeClick={(_, n) => onOpenTask(n.id)}
-          nodesDraggable={false}
-        >
-          <Background gap={16} className="!bg-app" />
-          <Controls showInteractive={false} />
-        </ReactFlow>
+        {nodes.length === 0 ? (
+          <EmptyState
+            icon={Network}
+            title="No tasks to graph yet"
+            message="As tasks and their dependencies appear, you'll see the dependency graph here."
+          />
+        ) : (
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            nodeTypes={nodeTypes}
+            fitView
+            proOptions={{ hideAttribution: true }}
+            onNodeClick={(_, n) => onOpenTask(n.id)}
+            nodesDraggable={false}
+          >
+            <Background gap={16} className="!bg-app" />
+            <Controls showInteractive={false} />
+          </ReactFlow>
+        )}
       </div>
     </div>
   );

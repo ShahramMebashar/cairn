@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -109,8 +110,45 @@ func expandHome(p string) string {
 	return p
 }
 
-func (s *Server) service(root string) *mcp.Service {
-	return mcp.NewService(store.New(root), s.actor, nil)
+func (s *Server) service(root, actor string) *mcp.Service {
+	return mcp.NewService(store.New(root), actor, nil)
+}
+
+// actorFor resolves who is making this request: the client-asserted identity from the
+// X-Cairn-Actor header (URL-encoded; falls back to ?actor=), sanitized, else the server
+// default. Trust model is local-dev (like a git author) — no auth.
+func (s *Server) actorFor(r *http.Request) string {
+	raw := r.Header.Get("X-Cairn-Actor")
+	if dec, err := url.QueryUnescape(raw); err == nil {
+		raw = dec
+	}
+	if raw == "" {
+		raw = r.URL.Query().Get("actor")
+	}
+	if a := sanitizeActor(raw); a != "" {
+		return a
+	}
+	return s.actor
+}
+
+// sanitizeActor keeps an actor string safe to store in YAML/provenance: single line, trimmed,
+// bounded length. Returns "" when nothing usable remains.
+func sanitizeActor(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	var b strings.Builder
+	for _, r := range raw {
+		if r == '\n' || r == '\r' || r == '\t' || r < 0x20 {
+			continue // drop control chars / newlines
+		}
+		b.WriteRune(r)
+		if b.Len() >= 64 {
+			break
+		}
+	}
+	return strings.TrimSpace(b.String())
 }
 
 // --- handlers ---
@@ -156,7 +194,7 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 		b, _ := strconv.ParseBool(v)
 		ready = &b
 	}
-	views, err := s.service(root).List(q.Get("status"), q.Get("assignee"), ready)
+	views, err := s.service(root, s.actor).List(q.Get("status"), q.Get("assignee"), ready)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -352,7 +390,7 @@ func (s *Server) svcFor(w http.ResponseWriter, r *http.Request) (*mcp.Service, s
 		writeJSON(w, http.StatusBadRequest, errBody(err))
 		return nil, "", false
 	}
-	return s.service(root), root, true
+	return s.service(root, s.actorFor(r)), root, true
 }
 
 func (s *Server) status(root string) statusResp {
@@ -361,6 +399,7 @@ func (s *Server) status(root string) statusResp {
 		Root:            root,
 		SuggestedPrefix: repo.DerivePrefix(root),
 		Actor:           s.actor,
+		SuggestedActor:  repo.DeriveActor(),
 	}
 	if resp.Initialized {
 		if cfg, err := store.New(root).Config(); err == nil {
@@ -384,6 +423,7 @@ type statusResp struct {
 	Closed          []string `json:"closed,omitempty"`
 	Initial         string   `json:"initial,omitempty"`
 	Actor           string   `json:"actor"`
+	SuggestedActor  string   `json:"suggestedActor"`
 }
 
 type taskDTO struct {

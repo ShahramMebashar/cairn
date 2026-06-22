@@ -294,3 +294,51 @@ func TestReorderEndpoint(t *testing.T) {
 		t.Fatalf("rank = %v, want 2048", got.Rank)
 	}
 }
+
+func TestPerRequestActor(t *testing.T) {
+	_, h := newServer(t)
+	var st statusResp
+	call(t, h, "POST", "/api/init", `{"prefix":"WEB"}`, &st)
+	if st.SuggestedActor == "" || !strings.HasPrefix(st.SuggestedActor, "human:") {
+		t.Fatalf("suggestedActor = %q, want human:*", st.SuggestedActor)
+	}
+
+	// A write carrying X-Cairn-Actor is attributed to that actor.
+	r := httptest.NewRequest("POST", "/api/tasks", strings.NewReader(`{"title":"x"}`))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("X-Cairn-Actor", "human:ali")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	var created taskDTO
+	_ = json.Unmarshal(w.Body.Bytes(), &created)
+
+	var got taskDTO
+	call(t, h, "GET", "/api/tasks/"+created.ID, "", &got)
+	if got.Provenance[0].Who != "human:ali" {
+		t.Fatalf("provenance who = %q, want human:ali", got.Provenance[0].Who)
+	}
+
+	// No header -> falls back to the server default (human:test from newServer).
+	var created2 taskDTO
+	call(t, h, "POST", "/api/tasks", `{"title":"y"}`, &created2)
+	var got2 taskDTO
+	call(t, h, "GET", "/api/tasks/"+created2.ID, "", &got2)
+	if got2.Provenance[0].Who != "human:test" {
+		t.Fatalf("fallback who = %q, want human:test", got2.Provenance[0].Who)
+	}
+}
+
+func TestSanitizeActor(t *testing.T) {
+	if got := sanitizeActor("  human:shahram  "); got != "human:shahram" {
+		t.Fatalf("trim = %q", got)
+	}
+	if got := sanitizeActor("human:ali\ninjected: true"); strings.ContainsAny(got, "\n\r") {
+		t.Fatalf("newline not stripped: %q", got)
+	}
+	if got := sanitizeActor("   "); got != "" {
+		t.Fatalf("empty = %q, want \"\"", got)
+	}
+}

@@ -2,15 +2,18 @@ import {
   ChevronsUpDown,
   CircleDashed,
   CircleDot,
+  HelpCircle,
   ListTodo,
   Moon,
   Network,
+  Pencil,
   PenSquare,
   Sparkles,
   SquareKanban,
   Sun,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,6 +25,11 @@ import {
 import { cn } from "@/lib/utils";
 import { getTheme, toggleTheme, type Theme } from "@/lib/theme";
 import { NotificationBell } from "@/components/NotificationBell";
+import { HelpDialog } from "@/components/HelpDialog";
+import { Assignee } from "@/components/Assignee";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useIdentity, displayName } from "@/lib/identity";
 import type { Status } from "@/lib/api";
 
 export type Filter = "all" | "active" | "backlog" | "ready";
@@ -59,6 +67,8 @@ export function AppSidebar({
   onOpenTask: (id: string) => void;
 }) {
   const [theme, setTheme] = useState<Theme>(getTheme());
+  const [helpOpen, setHelpOpen] = useState(false);
+  const { actor, setName } = useIdentity(status.suggestedActor);
   const folderName = status.root.split("/").filter(Boolean).pop() ?? status.root;
 
   return (
@@ -93,7 +103,7 @@ export function AppSidebar({
         >
           <PenSquare className="size-4" />
         </button>
-        <NotificationBell path={path} actor={status.actor} onOpenTask={onOpenTask} />
+        <NotificationBell path={path} actor={actor} onOpenTask={onOpenTask} />
       </div>
 
       <nav className="flex-1 space-y-px px-2">
@@ -143,16 +153,78 @@ export function AppSidebar({
         </button>
       </nav>
 
-      <div className="flex items-center justify-between px-3 py-2">
-        <span className="truncate text-xs text-muted-foreground">{folderName}</span>
-        <button
-          onClick={() => setTheme(toggleTheme())}
-          aria-label="Toggle theme"
-          className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
-        >
-          {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
-        </button>
+      <div className="flex flex-col gap-1 px-3 py-2">
+        <IdentityChip actor={actor} onRename={setName} />
+        <div className="flex items-center justify-between">
+          <span className="truncate text-xs text-muted-foreground">{folderName}</span>
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => setHelpOpen(true)}
+              aria-label="How cairn works"
+              className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+            >
+              <HelpCircle className="size-4" />
+            </button>
+            <button
+              onClick={() => setTheme(toggleTheme())}
+              aria-label="Toggle theme"
+              className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+            >
+              {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
+            </button>
+          </div>
+        </div>
       </div>
+      <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
     </aside>
+  );
+}
+
+function IdentityChip({ actor, onRename }: { actor: string; onRename: (name: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(displayName(actor));
+  useEffect(() => setName(displayName(actor)), [actor]);
+
+  const save = () => {
+    const n = name.trim();
+    if (n) onRename(n);
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button className="group flex items-center gap-2 rounded-md px-1 py-1 text-left hover:bg-foreground/5">
+          <Assignee actor={actor || "human:?"} />
+          <span className="min-w-0 flex-1 truncate text-[13px]">
+            {displayName(actor) || "Set your name"}
+          </span>
+          <Pencil className="size-3 text-muted-foreground opacity-0 group-hover:opacity-100" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-60">
+        <p className="mb-2 text-xs text-muted-foreground">
+          Your name — stamped on everything you do here.
+        </p>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            save();
+          }}
+          className="flex gap-2"
+        >
+          <Input
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. shahram"
+            className="h-8 text-sm"
+          />
+          <Button type="submit" size="sm" className="h-8">
+            Save
+          </Button>
+        </form>
+      </PopoverContent>
+    </Popover>
   );
 }

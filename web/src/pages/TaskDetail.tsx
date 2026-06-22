@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Assignee } from "@/components/Assignee";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Select,
@@ -244,9 +245,7 @@ export function TaskDetail({
             <Prop label="Assignee">
               {task.assignee ? (
                 <div className="flex items-center gap-2 text-sm">
-                  <Avatar className="size-5">
-                    <AvatarFallback className="text-[9px]">{initials(task.assignee)}</AvatarFallback>
-                  </Avatar>
+                  <Assignee actor={task.assignee} />
                   {task.assignee}
                 </div>
               ) : (

@@ -22,17 +22,18 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CheckCircle2, GitBranch, Plus, Search } from "lucide-react";
+import { CheckCircle2, GitBranch, Plus, Search, SquareKanban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SelectItem } from "@/components/ui/select";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { StatusIcon } from "@/components/StatusIcon";
 import { PriorityIcon, priorityLabel } from "@/components/PriorityIcon";
 import { Facet } from "@/components/Facet";
+import { EmptyState } from "@/components/EmptyState";
+import { Assignee } from "@/components/Assignee";
 import { useReorder, useTasks, useTransition } from "@/lib/queries";
 import { effectiveRank } from "@/lib/filter";
-import { cn, initials, statusLabel } from "@/lib/utils";
+import { cn, statusLabel } from "@/lib/utils";
 import type { Status, Task } from "@/lib/api";
 
 export function BoardView({
@@ -222,18 +223,27 @@ export function BoardView({
         onDragEnd={onDragEnd}
         onDragCancel={() => setActiveId(null)}
       >
-        <div className="flex flex-1 gap-3 overflow-x-auto p-3">
-          {states.map((s) => (
-            <Column
-              key={s}
-              status={s}
-              info={status}
-              cardIds={cols[s] ?? []}
-              byId={byId}
-              onOpenTask={onOpenTask}
-            />
-          ))}
-        </div>
+        {(tasks?.length ?? 0) === 0 ? (
+          <EmptyState
+            icon={SquareKanban}
+            title="Your board is empty"
+            message="Create a task, or let your agent pick up ready work — it'll show up here."
+            action={{ label: "New task", icon: Plus, onClick: onNewTask }}
+          />
+        ) : (
+          <div className="flex flex-1 gap-3 overflow-x-auto p-3">
+            {states.map((s) => (
+              <Column
+                key={s}
+                status={s}
+                info={status}
+                cardIds={cols[s] ?? []}
+                byId={byId}
+                onOpenTask={onOpenTask}
+              />
+            ))}
+          </div>
+        )}
         <DragOverlay dropAnimation={null}>
           {activeTask ? <Card task={activeTask} dragging /> : null}
         </DragOverlay>
@@ -351,11 +361,7 @@ function Card({ task, dragging }: { task: Task; dragging?: boolean }) {
               {passed}/{checks.length}
             </span>
           )}
-          {task.assignee && (
-            <Avatar className="size-5">
-              <AvatarFallback className="text-[9px]">{initials(task.assignee)}</AvatarFallback>
-            </Avatar>
-          )}
+          {task.assignee && <Assignee actor={task.assignee} />}
         </div>
       )}
     </div>

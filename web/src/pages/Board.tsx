@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { PriorityIcon, priorityLabel } from "@/components/PriorityIcon";
 import { Facet } from "@/components/Facet";
+import { EmptyState } from "@/components/EmptyState";
+import { Onboarding } from "@/components/Onboarding";
 import { addView, loadViews, removeView, type SavedView } from "@/lib/views";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -242,8 +244,15 @@ export function Board({
               <Skeleton key={i} className="h-7 w-full" />
             ))}
           </div>
+        ) : (tasks?.length ?? 0) === 0 ? (
+          <Onboarding status={status} onNewTask={onNewTask} />
         ) : isEmpty ? (
-          <EmptyState filter={filter} onNewTask={onNewTask} />
+          <EmptyState
+            icon={Inbox}
+            title={`Nothing in ${FILTER_LABEL[filter].toLowerCase()}`}
+            message="Try another view, or create a task."
+            action={{ label: "New task", icon: Plus, onClick: onNewTask }}
+          />
         ) : (
           groups.map(([state, list]) => (
             <StatusSection
@@ -318,23 +327,3 @@ function StatusSection({
   );
 }
 
-function EmptyState({ filter, onNewTask }: { filter: Filter; onNewTask: () => void }) {
-  return (
-    <div className="flex h-full flex-col items-center justify-center text-center">
-      <span className="grid size-12 place-items-center rounded-full bg-muted text-muted-foreground">
-        <Inbox className="size-5" />
-      </span>
-      <h2 className="mt-4 text-sm font-medium">
-        {filter === "all" ? "No tasks yet" : `Nothing in ${FILTER_LABEL[filter].toLowerCase()}`}
-      </h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {filter === "all" ? "Create the first task to get started." : "Try another view."}
-      </p>
-      {filter === "all" && (
-        <Button className="mt-4" size="sm" onClick={onNewTask}>
-          <Plus /> New task
-        </Button>
-      )}
-    </div>
-  );
-}

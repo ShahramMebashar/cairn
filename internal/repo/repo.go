@@ -11,6 +11,7 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 
@@ -66,6 +67,30 @@ func DerivePrefix(root string) string {
 		return "TASK" + out // ids must start with a letter
 	}
 	return out
+}
+
+// DeriveActor suggests a human identity from the OS login name, e.g. "human:shaho". It is a
+// default only — the web UI lets each person override it. Falls back to "human:dev".
+func DeriveActor() string {
+	name := ""
+	if u, err := user.Current(); err == nil {
+		name = u.Username
+	}
+	// On Windows the username can be "DOMAIN\\user"; keep the last segment.
+	if i := strings.LastIndexAny(name, `\/`); i >= 0 {
+		name = name[i+1:]
+	}
+	var b strings.Builder
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
+			b.WriteRune(r)
+		}
+	}
+	out := b.String()
+	if out == "" {
+		return "human:dev"
+	}
+	return "human:" + out
 }
 
 // Init scaffolds a cairn workspace at root. It is idempotent: an existing config.yaml is

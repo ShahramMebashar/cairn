@@ -1,5 +1,5 @@
 import { CheckCircle2, GitBranch, UserPlus } from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Assignee } from "@/components/Assignee";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PriorityIcon } from "@/components/PriorityIcon";
@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { StatusIcon } from "@/components/StatusIcon";
 import { useClaim, useTransition } from "@/lib/queries";
-import { cn, initials, statusLabel, timeAgo } from "@/lib/utils";
+import { cn, statusLabel, timeAgo } from "@/lib/utils";
 import type { Status, Task } from "@/lib/api";
 
 export function TaskRow({
@@ -137,14 +137,7 @@ export function TaskRow({
 
       {/* assignee, or a claim action on hover when unassigned */}
       {task.assignee ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Avatar className="size-5">
-              <AvatarFallback className="text-[9px]">{initials(task.assignee)}</AvatarFallback>
-            </Avatar>
-          </TooltipTrigger>
-          <TooltipContent>{task.assignee}</TooltipContent>
-        </Tooltip>
+        <Assignee actor={task.assignee} className="shrink-0" />
       ) : (
         <button
           aria-label="Claim"

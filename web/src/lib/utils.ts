@@ -13,6 +13,14 @@ export function initials(actor?: string): string {
   return (letters.slice(0, 2) || name.slice(0, 2)).toUpperCase()
 }
 
+/** Whether an actor is an AI agent, a human, or unknown — by the "agent:"/"human:" prefix. */
+export function actorKind(actor?: string): "agent" | "human" | null {
+  if (!actor) return null
+  if (actor.startsWith("agent:")) return "agent"
+  if (actor.startsWith("human:")) return "human"
+  return null
+}
+
 /** Human label for a status string: "in_progress" -> "In progress". */
 export function statusLabel(status: string): string {
   const s = status.replace(/_/g, " ")
