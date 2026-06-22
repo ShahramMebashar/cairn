@@ -31,9 +31,9 @@ export function Markdown({
     <div
       className={cn(
         "prose prose-sm max-w-none dark:prose-invert",
-        // let Shiki own code styling; neutralize prose's pre/code chrome
+        // let Shiki own code styling; neutralize prose's pre/code chrome (chips/headings
+        // are tuned globally in style.css)
         "prose-pre:m-0 prose-pre:bg-transparent prose-pre:p-0",
-        "prose-headings:font-semibold prose-headings:tracking-tight prose-a:text-brand",
         className,
       )}
     >
@@ -77,9 +77,10 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
   );
 }
 
-const InlineCode = ({ children }: { children?: React.ReactNode }) => (
-  <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">{children}</code>
-);
+// Inline code: styling lives in style.css (.prose code chip) so it's consistent across the
+// rendered body, notes, and the TipTap composer. The inline (note) variant keeps a local
+// chip since it's rendered outside .prose.
+const InlineCode = ({ children }: { children?: React.ReactNode }) => <code>{children}</code>;
 
 // In react-markdown v9, fenced blocks arrive as <pre><code class="language-x">. We unwrap
 // <pre> and let CodeBlock render its own Shiki <pre>; inline code stays a styled <code>.
