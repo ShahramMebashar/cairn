@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import {
+  Activity,
   CircleDashed,
-  CircleDot,
+  ClockAlert,
   FolderOpen,
   ListTodo,
   Moon,
   Network,
   Plus,
+  ScanEye,
   Sparkles,
   SquareKanban,
 } from "lucide-react";
@@ -28,9 +30,11 @@ import type { Status } from "@/lib/api";
 
 const VIEWS: { key: Filter; label: string; icon: typeof ListTodo }[] = [
   { key: "all", label: "All tasks", icon: ListTodo },
-  { key: "active", label: "Active", icon: CircleDot },
   { key: "backlog", label: "Backlog", icon: CircleDashed },
   { key: "ready", label: "Ready", icon: Sparkles },
+  { key: "active", label: "Active agent work", icon: Activity },
+  { key: "stalled", label: "Stalled agent work", icon: ClockAlert },
+  { key: "review", label: "Awaiting review", icon: ScanEye },
 ];
 
 export function CommandPalette({

@@ -14,6 +14,44 @@ export type Check = {
 
 export type Provenance = { who: string; at: string; did: string; text?: string };
 
+export type ExecutionState = "active" | "stalled" | "awaiting_review";
+
+export type Usage = {
+  inputTokens?: number;
+  outputTokens?: number;
+  cachedTokens?: number;
+  toolCalls?: number;
+};
+
+export type SessionLive = {
+  session: string;
+  heartbeatAt: string;
+  progress?: string;
+  worktree?: string;
+  usage?: Usage;
+};
+
+export type AgentSession = {
+  id: string;
+  task: string;
+  attempt: string;
+  actor: string;
+  client?: string;
+  model?: string;
+  status: "active" | "finished" | "canceled";
+  idempotencyKey: string;
+  startedAt: string;
+  endedAt?: string;
+  branch?: string;
+  headStarted?: string;
+  headFinished?: string;
+  summary?: string;
+  cancelReason?: string;
+  usage?: Usage;
+  health: "active" | "stalled" | "finished" | "canceled";
+  live?: SessionLive;
+};
+
 // Run is one parsed check-run log from .cairn/runs (output stays out of the task file).
 export type Run = {
   file: string;
@@ -41,6 +79,9 @@ export type Task = {
   checks?: Check[];
   provenance?: Provenance[];
   body?: string;
+  activeAttempt?: string;
+  executionState?: ExecutionState;
+  sessionId?: string;
 };
 
 export type UpdateFields = {
@@ -124,6 +165,11 @@ export const reorderTask = (path: string, id: string, rank: number) =>
 
 export const getRuns = (path: string, id: string) =>
   req<{ runs: Run[] }>("GET", `/api/tasks/${id}/runs?path=${enc(path)}`).then((r) => r.runs ?? []);
+
+export const listTaskSessions = (path: string, id: string) =>
+  req<{ sessions: AgentSession[] }>("GET", `/api/tasks/${id}/sessions?path=${enc(path)}`).then(
+    (r) => r.sessions ?? [],
+  );
 
 export const attestTask = (path: string, id: string, index: number, pass: boolean) =>
   req<Task>("POST", `/api/tasks/${id}/attest?path=${enc(path)}`, { index, pass });

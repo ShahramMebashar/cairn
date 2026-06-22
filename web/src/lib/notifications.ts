@@ -43,6 +43,8 @@ export function useNotifications(path: string, actor?: string) {
   const prev = useRef<Map<string, Snap> | null>(null);
   const [items, setItems] = useState<Notif[]>(() => load(path));
   const itemsRef = useRef(items);
+  // Assign synchronously during render so closures always see the latest items
+  // without the one-render lag that a useEffect assignment would introduce.
   itemsRef.current = items;
 
   const persist = (next: Notif[]) => {

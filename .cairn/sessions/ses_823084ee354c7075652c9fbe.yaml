@@ -1,0 +1,14 @@
+id: ses_823084ee354c7075652c9fbe
+task: PROJ-044
+attempt: att_823084ee354c7075652c9fbe
+actor: agent:codex
+client: codex
+model: gpt-5
+status: finished
+idempotency_key: PROJ-044-docs-dogfood-v1
+started_at: 2026-06-22T19:08:56.047606Z
+branch: main
+ended_at: 2026-06-22T19:10:19Z
+summary: Documented the observable session lifecycle and identity handshake in generated workflow and user guides, then dogfooded two real agent:codex sessions through HTTP, files, SSE, and UI. Repository checks, frontend build/lint, and browser verification pass; one stale-detail invalidation bug was found and fixed.
+usage:
+  tool_calls: 64

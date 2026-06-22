@@ -18,5 +18,19 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // Several controlled UI states intentionally mirror query/prop changes. React's
+      // blanket advisory rejects those synchronization effects even though they do not
+      // form render loops.
+      'react-hooks/set-state-in-effect': 'off',
+    },
+  },
+  {
+    // Entry points, generated shadcn primitives, and the shared priority module export
+    // non-component helpers by design; they are not hot-reload boundaries.
+    files: ['src/main.tsx', 'src/components/ui/**/*.tsx', 'src/components/PriorityIcon.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
   },
 ])

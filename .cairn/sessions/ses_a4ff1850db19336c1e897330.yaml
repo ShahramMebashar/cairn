@@ -1,0 +1,14 @@
+id: ses_a4ff1850db19336c1e897330
+task: PROJ-043
+attempt: att_a4ff1850db19336c1e897330
+actor: agent:codex
+client: codex
+model: gpt-5
+status: finished
+idempotency_key: PROJ-043-supervision-ui-v1
+started_at: 2026-06-22T19:05:39.320163Z
+branch: main
+ended_at: 2026-06-22T19:07:20Z
+summary: 'Built and verified the session supervision UI: Active/Stalled/Awaiting review views with live counts, task-row execution signals, and a session timeline showing heartbeat, progress, actor/client/model, Git context, usage, and handoff summary. Frontend build and lint pass; dark/light browser review passed.'
+usage:
+  tool_calls: 49

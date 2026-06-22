@@ -35,6 +35,7 @@ import (
 
 	"cairn/internal/mcp"
 	"cairn/internal/repo"
+	"cairn/internal/session"
 	"cairn/internal/store"
 	"cairn/internal/task"
 )
@@ -59,11 +60,19 @@ func New(defaultRoot, actor string) *Server {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/status", s.handleStatus)
+	mux.HandleFunc("GET /api/identity", s.handleIdentity)
 	mux.HandleFunc("POST /api/init", s.handleInit)
 	mux.HandleFunc("GET /api/tasks", s.handleList)
 	mux.HandleFunc("POST /api/tasks", s.handleCreate)
 	mux.HandleFunc("GET /api/tasks/{id}", s.handleGet)
 	mux.HandleFunc("GET /api/tasks/{id}/runs", s.handleRuns)
+	mux.HandleFunc("GET /api/tasks/{id}/sessions", s.handleListTaskSessions)
+	mux.HandleFunc("POST /api/tasks/{id}/sessions/begin", s.handleBeginSession)
+	mux.HandleFunc("GET /api/sessions", s.handleListSessions)
+	mux.HandleFunc("GET /api/sessions/{session}", s.handleGetSession)
+	mux.HandleFunc("POST /api/sessions/{session}/heartbeat", s.handleHeartbeat)
+	mux.HandleFunc("POST /api/sessions/{session}/finish", s.handleFinishSession)
+	mux.HandleFunc("POST /api/sessions/{session}/cancel", s.handleCancelSession)
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("POST /api/tasks/{id}/update", s.handleUpdate)
 	mux.HandleFunc("POST /api/tasks/{id}/reorder", s.handleReorder)
@@ -194,7 +203,7 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 		b, _ := strconv.ParseBool(v)
 		ready = &b
 	}
-	views, err := s.service(root, s.actor).List(q.Get("status"), q.Get("assignee"), ready)
+	views, err := s.service(root, s.actor).ListWithExecution(q.Get("status"), q.Get("assignee"), ready, q.Get("execution"))
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -203,6 +212,8 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 	for _, v := range views {
 		dto := dtoFromTask(v.Task, v.Ready)
 		dto.UpdatedAt = v.UpdatedAt
+		dto.ExecutionState = v.ExecutionState
+		dto.SessionID = v.SessionID
 		tasks = append(tasks, dto)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"tasks": tasks})
@@ -427,20 +438,23 @@ type statusResp struct {
 }
 
 type taskDTO struct {
-	ID         string     `json:"id"`
-	Title      string     `json:"title"`
-	Status     string     `json:"status"`
-	Assignee   string     `json:"assignee,omitempty"`
-	Deps       []string   `json:"deps,omitempty"`
-	Ready      bool       `json:"ready"`
-	UpdatedAt  string     `json:"updatedAt,omitempty"`
-	Rank       float64    `json:"rank,omitempty"`
-	Labels     []string   `json:"labels,omitempty"`
-	Priority   string     `json:"priority,omitempty"`
-	Parent     string     `json:"parent,omitempty"`
-	Checks     []checkDTO `json:"checks,omitempty"`
-	Provenance []provDTO  `json:"provenance,omitempty"`
-	Body       string     `json:"body,omitempty"`
+	ID             string     `json:"id"`
+	Title          string     `json:"title"`
+	Status         string     `json:"status"`
+	Assignee       string     `json:"assignee,omitempty"`
+	Deps           []string   `json:"deps,omitempty"`
+	Ready          bool       `json:"ready"`
+	UpdatedAt      string     `json:"updatedAt,omitempty"`
+	Rank           float64    `json:"rank,omitempty"`
+	Labels         []string   `json:"labels,omitempty"`
+	Priority       string     `json:"priority,omitempty"`
+	Parent         string     `json:"parent,omitempty"`
+	ActiveAttempt  string     `json:"activeAttempt,omitempty"`
+	ExecutionState string     `json:"executionState,omitempty"`
+	SessionID      string     `json:"sessionId,omitempty"`
+	Checks         []checkDTO `json:"checks,omitempty"`
+	Provenance     []provDTO  `json:"provenance,omitempty"`
+	Body           string     `json:"body,omitempty"`
 }
 
 type checkDTO struct {
@@ -461,7 +475,8 @@ type provDTO struct {
 
 func dtoFromTask(t task.Task, ready bool) taskDTO {
 	d := taskDTO{ID: t.ID, Title: t.Title, Status: t.Status, Assignee: t.Assignee, Deps: t.Deps,
-		Ready: ready, Rank: t.Rank, Labels: t.Labels, Priority: t.Priority, Parent: t.Parent}
+		Ready: ready, Rank: t.Rank, Labels: t.Labels, Priority: t.Priority, Parent: t.Parent,
+		ActiveAttempt: t.ActiveAttempt}
 	for _, c := range t.Checks {
 		d.Checks = append(d.Checks, checkDTO{Desc: c.Desc, Cmd: c.Cmd, Type: c.Type, Result: c.Result, Cwd: c.Cwd, Timeout: c.Timeout})
 	}
@@ -470,6 +485,7 @@ func dtoFromTask(t task.Task, ready bool) taskDTO {
 
 func dtoFromDoc(svc *mcp.Service, doc *store.Doc) taskDTO {
 	d := dtoFromTask(doc.Task, svc.ReadyOf(doc.Task))
+	d.ExecutionState, d.SessionID = svc.ExecutionOf(doc.Task)
 	d.Body = doc.Body
 	if n := len(doc.Provenance); n > 0 {
 		d.UpdatedAt = doc.Provenance[n-1].At
@@ -497,8 +513,13 @@ func writeErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		code = http.StatusNotFound
+	case errors.Is(err, store.ErrSessionNotFound):
+		code = http.StatusNotFound
 	case errors.Is(err, mcp.ErrAlreadyClaimed),
-		errors.Is(err, store.ErrConflict):
+		errors.Is(err, store.ErrConflict),
+		errors.Is(err, store.ErrSessionConflict),
+		errors.Is(err, store.ErrLiveSession),
+		errors.Is(err, session.ErrTerminal):
 		code = http.StatusConflict
 	case errors.Is(err, task.ErrDepsNotClosed),
 		errors.Is(err, task.ErrChecksNotPassed),
@@ -508,7 +529,14 @@ func writeErr(w http.ResponseWriter, err error) {
 		errors.Is(err, task.ErrDanglingDep),
 		errors.Is(err, task.ErrCycle),
 		errors.Is(err, task.ErrInvalidPriority),
-		errors.Is(err, mcp.ErrNotManual):
+		errors.Is(err, mcp.ErrNotManual),
+		errors.Is(err, mcp.ErrIdentityMismatch),
+		errors.Is(err, mcp.ErrClientMismatch),
+		errors.Is(err, mcp.ErrIdempotencyRequired),
+		errors.Is(err, mcp.ErrSessionActor),
+		errors.Is(err, mcp.ErrTaskClosed),
+		errors.Is(err, session.ErrSummaryRequired),
+		errors.Is(err, session.ErrReasonRequired):
 		code = http.StatusUnprocessableEntity
 	}
 	writeJSON(w, code, errBody(err))

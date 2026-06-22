@@ -1,5 +1,7 @@
 # Check-run output logs (SPEC §1, §6): full output stays out of git; tasks store only result:.
 .cairn/runs/
+.cairn/live/
+.cairn/write.lock
 
 # Build artifacts
 bin/

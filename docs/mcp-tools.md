@@ -1,4 +1,4 @@
-# MCP tools (the 7 verbs)
+# MCP tools
 
 Every verb is a thin adapter over the same rule-set in `internal/task`. Identity is fixed
 at server startup via `--actor`; it is **not** a tool argument. Every **write** appends one
@@ -8,13 +8,20 @@ All write verbs return the full task (the same shape as `get`).
 
 | Verb | R/W | Arguments | Returns |
 |---|---|---|---|
-| [`list`](#list) | R | `status?`, `assignee?`, `ready?` | `{ tasks: [...] }` |
+| [`identity`](#agent-sessions) | R | — | bound actor/client/version |
+| [`list`](#list) | R | `status?`, `assignee?`, `ready?`, `execution?` | `{ tasks: [...] }` |
 | [`get`](#get) | R | `id` | task |
 | [`create`](#create) | W | `title`, `body?`, `deps?`, `checks?` | task |
 | [`claim`](#claim) | W | `id` | task |
 | [`transition`](#transition) | W | `id`, `to` | task |
 | [`run_checks`](#run_checks) | W | `id`, `only?` | task |
 | [`note`](#note) | W | `id`, `text` | task |
+| [`begin`](#agent-sessions) | W | task, identity, runtime metadata, retry key | session |
+| [`heartbeat`](#agent-sessions) | W | session, progress, usage | session |
+| [`finish`](#agent-sessions) | W | session, summary, head, usage | session |
+| [`cancel`](#agent-sessions) | W | session, reason | session |
+| [`get_session`](#agent-sessions) | R | session | session |
+| [`list_sessions`](#agent-sessions) | R | task/actor/status/health filters | `{ sessions: [...] }` |
 
 ## Task shape
 
@@ -49,6 +56,7 @@ Filter the task graph. Omit a filter to ignore it.
 | `status` | string | only this status |
 | `assignee` | string | only this assignee |
 | `ready` | bool | only tasks whose deps are all closed (`true`) / not (`false`) |
+| `execution` | string | `active`, `stalled`, or `awaiting_review` |
 
 `list(ready=true, status=<initial>)` is the agent's **"what can I start now"** query.
 
@@ -149,3 +157,17 @@ Append a free-text `provenance` entry — an audit breadcrumb, no state change.
 ```json
 { "id": "PROJ-002", "text": "blocked on upstream API change" }
 ```
+
+## Agent sessions
+
+Session-aware agents use `identity → begin → heartbeat* → finish|cancel`. `begin` atomically
+claims the task, moves an initial task into the configured working state, and creates one
+durable attempt. Its `expected_actor` must exactly match `identity.actor`, and its
+`idempotency_key` makes retries safe.
+
+`finish` requires a review summary and moves the task to the configured review state. It
+does **not** close the task: workflow completion still requires passing checks and an
+explicit `transition`. `cancel` ends only the session, releases the assignment, and leaves
+the task open.
+
+See [Agent sessions](agent-sessions.md) for schemas, examples, health derivation, and storage.

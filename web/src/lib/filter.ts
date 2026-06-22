@@ -4,6 +4,8 @@ import type { Status, Task } from "@/lib/api";
 export const FILTER_LABEL: Record<Filter, string> = {
   all: "All tasks",
   active: "Active",
+  stalled: "Stalled",
+  review: "Awaiting review",
   backlog: "Backlog",
   ready: "Ready",
 };
@@ -13,7 +15,11 @@ export function matches(t: Task, filter: Filter, status: Status): boolean {
   const closed = status.closed ?? [];
   switch (filter) {
     case "active":
-      return !closed.includes(t.status) && t.status !== status.initial;
+      return !(status.closed ?? []).includes(t.status) && t.status !== status.initial;
+    case "stalled":
+      return t.executionState === "stalled";
+    case "review":
+      return t.executionState === "awaiting_review";
     case "backlog":
       return t.status === status.initial;
     case "ready":

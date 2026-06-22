@@ -1,18 +1,20 @@
 import {
+  Activity,
   ChevronsUpDown,
   CircleDashed,
-  CircleDot,
+  ClockAlert,
   HelpCircle,
   ListTodo,
   Moon,
   Network,
   Pencil,
   PenSquare,
+  ScanEye,
   Sparkles,
   SquareKanban,
   Sun,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -30,15 +32,21 @@ import { Assignee } from "@/components/Assignee";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useIdentity, displayName } from "@/lib/identity";
+import { useTasks } from "@/lib/queries";
 import type { Status } from "@/lib/api";
 
-export type Filter = "all" | "active" | "backlog" | "ready";
+export type Filter = "all" | "active" | "stalled" | "review" | "backlog" | "ready";
 
-const NAV: { key: Filter; label: string; icon: typeof ListTodo }[] = [
+const TASK_NAV: { key: Filter; label: string; icon: typeof ListTodo }[] = [
   { key: "all", label: "All tasks", icon: ListTodo },
-  { key: "active", label: "Active", icon: CircleDot },
   { key: "backlog", label: "Backlog", icon: CircleDashed },
   { key: "ready", label: "Ready", icon: Sparkles },
+];
+
+const SESSION_NAV: { key: Filter; label: string; icon: typeof ListTodo }[] = [
+  { key: "active", label: "Active", icon: Activity },
+  { key: "stalled", label: "Stalled", icon: ClockAlert },
+  { key: "review", label: "Awaiting review", icon: ScanEye },
 ];
 
 export function AppSidebar({
@@ -69,7 +77,13 @@ export function AppSidebar({
   const [theme, setTheme] = useState<Theme>(getTheme());
   const [helpOpen, setHelpOpen] = useState(false);
   const { actor, setName } = useIdentity(status.suggestedActor);
+  const { data: tasks } = useTasks(path);
   const folderName = status.root.split("/").filter(Boolean).pop() ?? status.root;
+  const counts: Partial<Record<Filter, number>> = {
+    active: tasks?.filter((task) => task.executionState === "active").length,
+    stalled: tasks?.filter((task) => task.executionState === "stalled").length,
+    review: tasks?.filter((task) => task.executionState === "awaiting_review").length,
+  };
 
   return (
     <aside className="flex w-[15rem] shrink-0 flex-col">
@@ -107,7 +121,7 @@ export function AppSidebar({
       </div>
 
       <nav className="flex-1 space-y-px px-2">
-        {NAV.map(({ key, label, icon: Icon }) => (
+        {TASK_NAV.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             onClick={() => onFilter(key)}
@@ -121,6 +135,28 @@ export function AppSidebar({
           >
             <Icon className="size-4 shrink-0" />
             {label}
+          </button>
+        ))}
+
+        <div className="my-1.5 border-t" />
+        <p className="px-2 pb-1 pt-1.5 text-[11px] font-medium text-muted-foreground">Agent work</p>
+        {SESSION_NAV.map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            onClick={() => onFilter(key)}
+            aria-current={active === key ? "page" : undefined}
+            className={cn(
+              "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] transition-colors",
+              active === key
+                ? "bg-foreground/[0.07] font-medium text-foreground"
+                : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
+            )}
+          >
+            <Icon className="size-4 shrink-0" />
+            <span>{label}</span>
+            {!!counts[key] && (
+              <span className="ml-auto text-xs tabular-nums text-muted-foreground">{counts[key]}</span>
+            )}
           </button>
         ))}
 
@@ -154,7 +190,7 @@ export function AppSidebar({
       </nav>
 
       <div className="flex flex-col gap-1 px-3 py-2">
-        <IdentityChip actor={actor} onRename={setName} />
+        <IdentityChip key={actor} actor={actor} onRename={setName} />
         <div className="flex items-center justify-between">
           <span className="truncate text-xs text-muted-foreground">{folderName}</span>
           <div className="flex items-center gap-0.5">
@@ -183,7 +219,6 @@ export function AppSidebar({
 function IdentityChip({ actor, onRename }: { actor: string; onRename: (name: string) => void }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(displayName(actor));
-  useEffect(() => setName(displayName(actor)), [actor]);
 
   const save = () => {
     const n = name.trim();

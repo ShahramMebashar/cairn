@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -73,19 +74,22 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 // Event is the signal sent to a subscriber. It carries no task data: the client refetches
 // via the REST endpoints, reusing the existing DTOs so the stream can't drift from them.
 type Event struct {
-	Type string `json:"type"`         // evtTaskChanged | evtTasksChanged
-	ID   string `json:"id,omitempty"` // set only for evtTaskChanged
+	Type    string `json:"type"`
+	ID      string `json:"id,omitempty"`      // task id for evtTaskChanged
+	Session string `json:"session,omitempty"` // session id for evtSessionChanged
 }
 
 const (
-	evtTaskChanged  = "task-changed"  // one task file changed; client refetches that task
-	evtTasksChanged = "tasks-changed" // list membership / config / multiple changed
+	evtTaskChanged    = "task-changed"
+	evtTasksChanged   = "tasks-changed"
+	evtSessionChanged = "session-changed"
 )
 
 // classify maps a changed path to its impact. kind is one of the constants below.
 const (
 	kindIgnore = iota
 	kindTask
+	kindSession
 	kindList
 )
 
@@ -96,8 +100,12 @@ func classify(path string) (id string, kind int) {
 		return "", kindIgnore // atomic-write temp file (store.atomicWrite)
 	case base == "config.yaml":
 		return "", kindList // board states changed
-	case strings.HasSuffix(base, ".md"):
+	case filepath.Base(filepath.Dir(path)) == "tasks" && strings.HasSuffix(base, ".md"):
 		return strings.TrimSuffix(base, ".md"), kindTask
+	case filepath.Base(filepath.Dir(path)) == "sessions" && strings.HasSuffix(base, ".yaml"):
+		return strings.TrimSuffix(base, ".yaml"), kindSession
+	case filepath.Base(filepath.Dir(path)) == "live" && strings.HasSuffix(base, ".json"):
+		return strings.TrimSuffix(base, ".json"), kindSession
 	default:
 		return "", kindIgnore
 	}
@@ -111,12 +119,14 @@ func coalesce(in <-chan string, d time.Duration, emit func(Event)) {
 	timer := time.NewTimer(d)
 	timer.Stop()
 
-	ids := map[string]struct{}{}
+	taskIDs := map[string]struct{}{}
+	sessionIDs := map[string]struct{}{}
 	listLevel := false
 	armed := false
 
 	reset := func() {
-		ids = map[string]struct{}{}
+		taskIDs = map[string]struct{}{}
+		sessionIDs = map[string]struct{}{}
 		listLevel = false
 		armed = false
 	}
@@ -134,7 +144,9 @@ func coalesce(in <-chan string, d time.Duration, emit func(Event)) {
 			case kindList:
 				listLevel = true
 			case kindTask:
-				ids[id] = struct{}{}
+				taskIDs[id] = struct{}{}
+			case kindSession:
+				sessionIDs[id] = struct{}{}
 			}
 			if !armed {
 				armed = true
@@ -144,17 +156,22 @@ func coalesce(in <-chan string, d time.Duration, emit func(Event)) {
 			if !armed {
 				continue
 			}
-			emit(buildEvent(ids, listLevel))
+			emit(buildEvent(taskIDs, sessionIDs, listLevel))
 			reset()
 		}
 	}
 }
 
-func buildEvent(ids map[string]struct{}, listLevel bool) Event {
-	if listLevel || len(ids) != 1 {
+func buildEvent(taskIDs, sessionIDs map[string]struct{}, listLevel bool) Event {
+	if !listLevel && len(taskIDs) == 0 && len(sessionIDs) == 1 {
+		for id := range sessionIDs {
+			return Event{Type: evtSessionChanged, Session: id}
+		}
+	}
+	if listLevel || len(taskIDs) != 1 || len(sessionIDs) != 0 {
 		return Event{Type: evtTasksChanged}
 	}
-	for id := range ids {
+	for id := range taskIDs {
 		return Event{Type: evtTaskChanged, ID: id}
 	}
 	return Event{Type: evtTasksChanged} // unreachable: len(ids)==1 above
@@ -223,10 +240,18 @@ func (h *Hub) startWatcher(root string) (*rootWatch, error) {
 		return nil, err
 	}
 	cairn := filepath.Join(root, ".cairn")
+	for _, dir := range []string{filepath.Join(cairn, "sessions"), filepath.Join(cairn, "live")} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			w.Close()
+			return nil, fmt.Errorf("watcher: create %s: %w", dir, err)
+		}
+	}
 	// Watch the dirs, not the files: atomic temp+rename swaps inodes (store.atomicWrite).
 	// A missing dir is not fatal — the workspace may not be initialized yet.
 	_ = w.Add(cairn)
 	_ = w.Add(filepath.Join(cairn, "tasks"))
+	_ = w.Add(filepath.Join(cairn, "sessions"))
+	_ = w.Add(filepath.Join(cairn, "live"))
 
 	rw := &rootWatch{watcher: w, subs: map[int]chan Event{}}
 

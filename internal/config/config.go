@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"time"
 
@@ -27,6 +28,10 @@ type Config struct {
 	Closed              []string `yaml:"closed"`
 	Initial             string   `yaml:"initial"`
 	CheckTimeoutDefault int      `yaml:"check_timeout_default"`
+	WorkingState        string   `yaml:"working_state,omitempty"`
+	ReviewState         string   `yaml:"review_state,omitempty"`
+	SessionHeartbeat    int      `yaml:"session_heartbeat_interval,omitempty"`
+	SessionStaleAfter   int      `yaml:"session_stale_after,omitempty"`
 }
 
 // Default returns the standard starting config for a freshly initialized repo. The
@@ -40,6 +45,10 @@ func Default(prefix string) Config {
 		Closed:              []string{"done", "canceled"},
 		Initial:             "backlog",
 		CheckTimeoutDefault: 120,
+		WorkingState:        "in_progress",
+		ReviewState:         "in_review",
+		SessionHeartbeat:    30,
+		SessionStaleAfter:   180,
 	}
 }
 
@@ -66,8 +75,25 @@ func Save(path string, c Config) error {
 	if err != nil {
 		return fmt.Errorf("config: marshal: %w", err)
 	}
-	if err := os.WriteFile(path, b, 0o644); err != nil {
-		return fmt.Errorf("config: write %s: %w", path, err)
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".config-*.tmp")
+	if err != nil {
+		return fmt.Errorf("config: create temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if err := tmp.Chmod(0o644); err != nil {
+		tmp.Close()
+		return fmt.Errorf("config: chmod temp file: %w", err)
+	}
+	if _, err := tmp.Write(b); err != nil {
+		tmp.Close()
+		return fmt.Errorf("config: write temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("config: close temp file: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("config: replace %s: %w", path, err)
 	}
 	return nil
 }
@@ -86,6 +112,11 @@ func (c Config) Validate() error {
 			return fmt.Errorf("%w: closed state %q is not in states", ErrInvalidConfig, s)
 		}
 	}
+	for name, state := range map[string]string{"working_state": c.WorkingState, "review_state": c.ReviewState} {
+		if state != "" && !c.isState(state) {
+			return fmt.Errorf("%w: %s %q is not in states", ErrInvalidConfig, name, state)
+		}
+	}
 	return nil
 }
 
@@ -94,7 +125,7 @@ func (c Config) isState(s string) bool {
 }
 
 // NewID mints the next task id and returns a copy of the config with the counter
-// advanced. It is pure — the caller persists `next` (under the store mutex, SPEC §3) so
+// advanced. It is pure — the caller persists `next` (under the repository lock, SPEC §3) so
 // the monotonic counter is never lost or reused.
 func (c Config) NewID() (id string, next Config) {
 	next = c
@@ -109,4 +140,51 @@ func (c Config) CheckTimeout(perCheckSeconds int) time.Duration {
 		perCheckSeconds = c.CheckTimeoutDefault
 	}
 	return time.Duration(perCheckSeconds) * time.Second
+}
+
+// Working returns the configured first working state, or the first non-initial, non-closed
+// state for legacy configurations.
+func (c Config) Working() string {
+	if c.WorkingState != "" {
+		return c.WorkingState
+	}
+	for _, state := range c.States {
+		if state != c.Initial && !slices.Contains(c.Closed, state) {
+			return state
+		}
+	}
+	return c.Initial
+}
+
+// Review returns the configured review state when one exists.
+func (c Config) Review() string {
+	if c.ReviewState != "" {
+		return c.ReviewState
+	}
+	for _, state := range c.States {
+		if state == "in_review" {
+			return state
+		}
+	}
+	return ""
+}
+
+// SessionStaleDuration returns the heartbeat expiry, defaulting to three minutes.
+func (c Config) SessionStaleDuration() time.Duration {
+	seconds := c.SessionStaleAfter
+	if seconds <= 0 {
+		seconds = 180
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+// SessionHeartbeatDuration returns the cadence at which agents should heartbeat,
+// defaulting to thirty seconds. It mirrors SessionStaleDuration so configs missing the
+// field (e.g. a zero-value Config) still resolve a sensible interval.
+func (c Config) SessionHeartbeatDuration() time.Duration {
+	seconds := c.SessionHeartbeat
+	if seconds <= 0 {
+		seconds = 30
+	}
+	return time.Duration(seconds) * time.Second
 }

@@ -6,7 +6,8 @@ files), one rule-set (`internal/task`), no database.
 
 - [Getting started](getting-started.md) — install, build, run.
 - [Connect to Claude](connect-claude.md) — wire `cairn` into Claude Code / Desktop.
-- [MCP tools](mcp-tools.md) — the 7 verbs, with arguments and examples.
+- [MCP tools](mcp-tools.md) — task and agent-session tools, with arguments and examples.
+- [Agent sessions](agent-sessions.md) — identity, lifecycle, supervision, and storage.
 - [Task files](task-files.md) — file format, config, deps, gates.
 
 See [`../SPEC.md`](../SPEC.md) for the frozen v0 contract.

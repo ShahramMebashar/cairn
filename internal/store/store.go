@@ -2,7 +2,7 @@
 // losslessly, mutates frontmatter at the yaml.Node level (so unknown keys, ordering,
 // and comments survive every write), saves atomically via temp+rename, scans the tasks
 // directory, validates the dep graph on load, and serializes all writes behind one
-// process mutex.
+// repository-wide advisory lock.
 //
 // The split is deliberate: reads decode into the typed task.Task convenience view, but
 // writes operate on the raw node — never a struct round-trip, which would drop unknown
@@ -11,6 +11,7 @@ package store
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -36,8 +37,9 @@ var ErrNotFound = errors.New("task not found")
 // clobber the newer state (optimistic concurrency, SPEC §8).
 var ErrConflict = errors.New("task changed since it was read")
 
-// Store is rooted at a repo containing .cairn/. A single mutex serializes writes;
-// reads are lock-free because atomic rename means a reader never sees a half-written file.
+// Store is rooted at a repo containing .cairn/. The mutex serializes goroutines sharing
+// this instance; Write also takes a repository-wide OS lock for other Cairn processes.
+// Reads stay lock-free because atomic rename prevents half-written files.
 type Store struct {
 	root string
 	mu   sync.Mutex
@@ -48,6 +50,7 @@ func New(root string) *Store { return &Store{root: root} }
 
 func (s *Store) tasksDir() string   { return filepath.Join(s.root, ".cairn", "tasks") }
 func (s *Store) configPath() string { return filepath.Join(s.root, ".cairn", "config.yaml") }
+func (s *Store) lockPath() string   { return filepath.Join(s.root, ".cairn", "write.lock") }
 func (s *Store) taskPath(id string) string {
 	return filepath.Join(s.tasksDir(), id+".md")
 }
@@ -83,17 +86,18 @@ type Doc struct {
 // docFields is the read-side decode target. Unknown keys are intentionally absent here —
 // they live only in the node and are preserved through it.
 type docFields struct {
-	ID         string        `yaml:"id"`
-	Title      string        `yaml:"title"`
-	Status     string        `yaml:"status"`
-	Assignee   string        `yaml:"assignee"`
-	Deps       []string      `yaml:"deps"`
-	Labels     []string      `yaml:"labels"`
-	Priority   string        `yaml:"priority"`
-	Parent     string        `yaml:"parent"`
-	Rank       float64       `yaml:"rank"`
-	Checks     []checkFields `yaml:"checks"`
-	Provenance []Provenance  `yaml:"provenance"`
+	ID            string        `yaml:"id"`
+	Title         string        `yaml:"title"`
+	Status        string        `yaml:"status"`
+	Assignee      string        `yaml:"assignee"`
+	Deps          []string      `yaml:"deps"`
+	Labels        []string      `yaml:"labels"`
+	Priority      string        `yaml:"priority"`
+	Parent        string        `yaml:"parent"`
+	Rank          float64       `yaml:"rank"`
+	ActiveAttempt string        `yaml:"active_attempt"`
+	Checks        []checkFields `yaml:"checks"`
+	Provenance    []Provenance  `yaml:"provenance"`
 }
 
 type checkFields struct {
@@ -195,7 +199,8 @@ func parse(b []byte) (*Doc, error) {
 		return nil, fmt.Errorf("store: decode frontmatter: %w", err)
 	}
 	d.Task = task.Task{ID: f.ID, Title: f.Title, Status: f.Status, Assignee: f.Assignee,
-		Deps: f.Deps, Labels: f.Labels, Priority: f.Priority, Parent: f.Parent, Rank: f.Rank}
+		Deps: f.Deps, Labels: f.Labels, Priority: f.Priority, Parent: f.Parent, Rank: f.Rank,
+		ActiveAttempt: f.ActiveAttempt}
 	for _, c := range f.Checks {
 		d.Task.Checks = append(d.Task.Checks, c.toTask())
 	}
@@ -279,8 +284,23 @@ func (d *Doc) SetRank(rank float64) error {
 
 // SetAssignee sets the assignee (used by claim, SPEC §7).
 func (d *Doc) SetAssignee(who string) error {
-	setScalar(d.mapping(), "assignee", strNode(who))
+	if who == "" {
+		removeKey(d.mapping(), "assignee")
+	} else {
+		setScalar(d.mapping(), "assignee", strNode(who))
+	}
 	d.Task.Assignee = who
+	return nil
+}
+
+// SetActiveAttempt records the session attempt currently eligible for review.
+func (d *Doc) SetActiveAttempt(id string) error {
+	if id == "" {
+		removeKey(d.mapping(), "active_attempt")
+	} else {
+		setScalar(d.mapping(), "active_attempt", strNode(id))
+	}
+	d.Task.ActiveAttempt = id
 	return nil
 }
 
@@ -316,14 +336,15 @@ func (d *Doc) AppendProvenance(who, did, text string, at time.Time) error {
 	return nil
 }
 
-// Save renders the Doc and writes it atomically under the process mutex (SPEC §8).
+// Save renders the Doc and writes it atomically under the repository write lock (SPEC §8).
 func (s *Store) Save(d *Doc) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.save(d)
+	return s.Write(context.Background(), "", "save task", func(tx *WriteTx) error {
+		return tx.SaveTask(d)
+	})
 }
 
-// save renders frontmatter from the node and recomposes the file. Callers must hold mu.
+// save renders frontmatter from the node and recomposes the file. Callers must hold the
+// repository write transaction.
 // A Doc carrying a version (i.e. read via Get) must still match the on-disk file, else a
 // concurrent writer changed it and we refuse with ErrConflict rather than clobber.
 func (s *Store) save(d *Doc) error {
@@ -369,7 +390,7 @@ func (s *Store) checkVersion(d *Doc) error {
 	return nil
 }
 
-// Create mints the next id under the mutex, writes a new task file in the initial state
+// Create mints the next id under the repository lock, writes a new task file in the initial state
 // with a `created` provenance entry, and persists the advanced counter (SPEC §3, §7).
 // Draft is the caller-supplied content for a new task. Id and status are engine-assigned.
 type Draft struct {
@@ -384,53 +405,55 @@ type Draft struct {
 }
 
 func (s *Store) Create(draft Draft, actor string, at time.Time) (*Doc, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	var created *Doc
+	err := s.Write(context.Background(), actor, "create task", func(tx *WriteTx) error {
+		cfg, err := config.Load(s.configPath())
+		if err != nil {
+			return err
+		}
+		id, next := cfg.NewID()
 
-	cfg, err := config.Load(s.configPath())
-	if err != nil {
-		return nil, err
-	}
-	id, next := cfg.NewID()
+		d := &Doc{Body: draft.Body}
+		d.node = yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}}
+		m := d.mapping()
+		m.Content = append(m.Content, strNode("id"), strNode(id))
+		m.Content = append(m.Content, strNode("title"), strNode(draft.Title))
+		m.Content = append(m.Content, strNode("status"), strNode(cfg.Initial))
+		if draft.Priority != "" {
+			m.Content = append(m.Content, strNode("priority"), strNode(draft.Priority))
+		}
+		if len(draft.Labels) > 0 {
+			m.Content = append(m.Content, strNode("labels"), strSeq(draft.Labels))
+		}
+		if draft.Parent != "" {
+			m.Content = append(m.Content, strNode("parent"), strNode(draft.Parent))
+		}
+		if draft.Rank != 0 {
+			m.Content = append(m.Content, strNode("rank"), floatNode(draft.Rank))
+		}
+		if len(draft.Deps) > 0 {
+			m.Content = append(m.Content, strNode("deps"), strSeq(draft.Deps))
+		}
+		if len(draft.Checks) > 0 {
+			m.Content = append(m.Content, strNode("checks"), checksNode(draft.Checks))
+		}
+		d.Task = task.Task{ID: id, Title: draft.Title, Status: cfg.Initial, Deps: draft.Deps,
+			Checks: draft.Checks, Labels: draft.Labels, Priority: draft.Priority, Parent: draft.Parent,
+			Rank: draft.Rank}
 
-	d := &Doc{Body: draft.Body}
-	d.node = yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}}
-	m := d.mapping()
-	m.Content = append(m.Content, strNode("id"), strNode(id))
-	m.Content = append(m.Content, strNode("title"), strNode(draft.Title))
-	m.Content = append(m.Content, strNode("status"), strNode(cfg.Initial))
-	if draft.Priority != "" {
-		m.Content = append(m.Content, strNode("priority"), strNode(draft.Priority))
-	}
-	if len(draft.Labels) > 0 {
-		m.Content = append(m.Content, strNode("labels"), strSeq(draft.Labels))
-	}
-	if draft.Parent != "" {
-		m.Content = append(m.Content, strNode("parent"), strNode(draft.Parent))
-	}
-	if draft.Rank != 0 {
-		m.Content = append(m.Content, strNode("rank"), floatNode(draft.Rank))
-	}
-	if len(draft.Deps) > 0 {
-		m.Content = append(m.Content, strNode("deps"), strSeq(draft.Deps))
-	}
-	if len(draft.Checks) > 0 {
-		m.Content = append(m.Content, strNode("checks"), checksNode(draft.Checks))
-	}
-	d.Task = task.Task{ID: id, Title: draft.Title, Status: cfg.Initial, Deps: draft.Deps,
-		Checks: draft.Checks, Labels: draft.Labels, Priority: draft.Priority, Parent: draft.Parent,
-		Rank: draft.Rank}
-
-	if err := d.AppendProvenance(actor, "created", "", at); err != nil {
-		return nil, err
-	}
-	if err := s.save(d); err != nil {
-		return nil, err
-	}
-	if err := config.Save(s.configPath(), next); err != nil {
-		return nil, err
-	}
-	return d, nil
+		if err := d.AppendProvenance(actor, "created", "", at); err != nil {
+			return err
+		}
+		if err := tx.SaveTask(d); err != nil {
+			return err
+		}
+		if err := config.Save(s.configPath(), next); err != nil {
+			return err
+		}
+		created = d
+		return nil
+	})
+	return created, err
 }
 
 // --- yaml.Node helpers ---
@@ -438,6 +461,9 @@ func (s *Store) Create(draft Draft, actor string, at time.Time) (*Doc, error) {
 func strNode(s string) *yaml.Node { return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: s} }
 func intNode(i int) *yaml.Node {
 	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: strconv.Itoa(i)}
+}
+func int64Node(i int64) *yaml.Node {
+	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: strconv.FormatInt(i, 10)}
 }
 func floatNode(f float64) *yaml.Node {
 	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!float", Value: strconv.FormatFloat(f, 'f', -1, 64)}

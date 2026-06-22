@@ -16,13 +16,22 @@ done | canceled`; closed: `done`, `canceled`). Transitions are free except two g
 
 ## The agent loop
 
-1. **Find work** — list ready tasks in the initial state ("what can I start now").
-2. **Claim** — set yourself as the assignee.
-3. **Start** — transition to the first working state (e.g. `in_progress`).
-4. **Build** — make the change; write the test first where it applies.
-5. **Note as you go** — add a short provenance note at each meaningful step.
-6. **Run checks** — run the task's checks before closing.
-7. **Close** — transition to a closed state; the checks gate runs and refuses on failure.
+1. **Identify** — call `identity`; use its exact bound actor for session writes.
+2. **Find work** — list ready tasks in the initial state ("what can I start now").
+3. **Begin** — call `begin` with `expected_actor` and a unique `idempotency_key`. This
+   claims the task, enters the working state, and returns the session id.
+4. **Build + heartbeat** — make the change and periodically report concise progress and
+   cumulative usage with `heartbeat` (status, never chain-of-thought).
+5. **Note decisions** — add a short provenance note at each meaningful decision.
+6. **Run checks** — run the task's checks before handoff.
+7. **Finish** — call `finish` with a useful review summary. This ends the session and moves
+   the task to review; it does **not** claim the work is verified or close the task.
+8. **Close after review** — transition to a closed state; the checks gate runs and refuses
+   on failure.
+
+If work is abandoned, call `cancel` with a reason. This ends the session and releases the
+assignment while leaving the task open. Legacy clients may still use `claim` + `transition`,
+but their work is not session-observable.
 
 ## Note discipline
 

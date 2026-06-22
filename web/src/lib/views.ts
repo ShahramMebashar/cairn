@@ -2,7 +2,7 @@
 
 export type SavedView = {
   name: string;
-  filter: string; // base filter (all/active/backlog/ready)
+  filter: string; // base filter (all/backlog/ready/active/stalled/review)
   query?: string;
   label?: string;
   assignee?: string;

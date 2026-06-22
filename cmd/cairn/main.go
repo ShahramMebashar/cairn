@@ -4,7 +4,7 @@
 // Usage:
 //
 //	cairn init  [--prefix PROJ] [--repo .]          # scaffold .cairn/ in a project
-//	cairn serve [--actor agent:claude-1] [--repo .] # MCP server over stdio (auto-inits)
+//	cairn serve [--actor agent:claude-1] [--client claude] [--repo .] # MCP server over stdio
 //	cairn web   [--addr :8080] [--repo .]           # HTTP server for the web UI
 //
 // Identity for MCP writes is injected once via --actor and stamped onto every write as
@@ -58,7 +58,8 @@ func usage() error {
 	fmt.Fprint(os.Stderr, `cairn — cairn task tool
 
   cairn init  [--prefix PROJ] [--repo .]            scaffold .cairn/ in a project
-  cairn serve [--actor agent:claude-1] [--repo .]   MCP server over stdio (auto-inits)
+  cairn serve [--actor agent:claude-1] [--client claude] [--repo .]
+                                                    MCP server over stdio (auto-inits)
   cairn web   [--addr :8080] [--repo .]             HTTP server for the web UI
 `)
 	return nil
@@ -81,6 +82,7 @@ func runInit(args []string) error {
 func runServe(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	actor := fs.String("actor", "", "identity for writes, e.g. agent:claude-1 or human:shah")
+	client := fs.String("client", "", "agent client identity, e.g. codex or claude")
 	repoRoot := fs.String("repo", ".", "repo root containing .cairn/")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -93,7 +95,7 @@ func runServe(args []string) error {
 		return err
 	}
 
-	svc := mcp.NewService(store.New(*repoRoot), *actor, nil)
+	svc := mcp.NewServiceWithClient(store.New(*repoRoot), *actor, *client, nil)
 	srv := mcp.NewServer(svc)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)

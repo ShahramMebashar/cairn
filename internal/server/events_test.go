@@ -35,6 +35,34 @@ func TestHubEmitsOnTaskFileWrite(t *testing.T) {
 	}
 }
 
+func TestHubEmitsOnSessionFileWrite(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".cairn", "tasks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	hub := NewHub(10 * time.Millisecond)
+	ch, cancel, err := hub.Subscribe(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cancel()
+
+	path := filepath.Join(root, ".cairn", "sessions", "ses_123.yaml")
+	if err := os.WriteFile(path, []byte("id: ses_123\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case e := <-ch:
+		if e.Type != evtSessionChanged || e.Session != "ses_123" {
+			t.Fatalf("got %+v, want session-changed ses_123", e)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no event after session-file write")
+	}
+}
+
 func TestHubRefCountedTeardown(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, ".cairn", "tasks"), 0o755); err != nil {
@@ -130,6 +158,25 @@ func TestCoalesceConfigIsListLevel(t *testing.T) {
 	case e := <-got:
 		if e.Type != evtTasksChanged {
 			t.Fatalf("got %+v, want tasks-changed", e)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no event emitted")
+	}
+	close(in)
+}
+
+func TestCoalesceSessionChange(t *testing.T) {
+	in := make(chan string, 8)
+	got := make(chan Event, 8)
+	go coalesce(in, 10*time.Millisecond, func(e Event) { got <- e })
+
+	in <- "/x/.cairn/sessions/ses_123.yaml"
+	in <- "/x/.cairn/live/ses_123.json"
+
+	select {
+	case e := <-got:
+		if e.Type != evtSessionChanged || e.Session != "ses_123" {
+			t.Fatalf("got %+v, want session-changed ses_123", e)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("no event emitted")

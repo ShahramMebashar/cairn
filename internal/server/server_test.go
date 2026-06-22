@@ -9,7 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"cairn/internal/mcp"
 	"cairn/internal/repo"
+	"cairn/internal/session"
 )
 
 type runResp struct {
@@ -141,6 +143,69 @@ func TestTaskLifecycleOverHTTP(t *testing.T) {
 	call(t, h, "POST", "/api/tasks/WEB-001/transition", `{"to":"done"}`, &done)
 	if done.Status != "done" || done.Checks[0].Result != "pass" {
 		t.Fatalf("transition: %+v", done)
+	}
+}
+
+func TestSessionLifecycleOverHTTP(t *testing.T) {
+	_, h := newServer(t)
+	var st statusResp
+	call(t, h, "POST", "/api/init", `{"prefix":"WEB"}`, &st)
+	var created taskDTO
+	call(t, h, "POST", "/api/tasks", `{"title":"observable"}`, &created)
+
+	var identity mcp.Identity
+	call(t, h, "GET", "/api/identity", "", &identity)
+	if identity.Actor != "human:test" {
+		t.Fatalf("identity = %+v", identity)
+	}
+
+	var begun mcp.SessionView
+	call(t, h, "POST", "/api/tasks/"+created.ID+"/sessions/begin",
+		`{"expectedActor":"human:test","client":"test","idempotencyKey":"begin-1"}`, &begun)
+	if begun.TaskID != created.ID || begun.Status != session.StatusActive {
+		t.Fatalf("begun = %+v", begun)
+	}
+
+	var heartbeat mcp.SessionView
+	call(t, h, "POST", "/api/sessions/"+begun.ID+"/heartbeat", `{"progress":"running tests"}`, &heartbeat)
+	if heartbeat.Live == nil || heartbeat.Live.Progress != "running tests" {
+		t.Fatalf("heartbeat = %+v", heartbeat)
+	}
+
+	var finished mcp.SessionView
+	call(t, h, "POST", "/api/sessions/"+begun.ID+"/finish", `{"summary":"implemented"}`, &finished)
+	if finished.Status != session.StatusFinished {
+		t.Fatalf("finished = %+v", finished)
+	}
+
+	var sessions struct {
+		Sessions []mcp.SessionView `json:"sessions"`
+	}
+	call(t, h, "GET", "/api/tasks/"+created.ID+"/sessions", "", &sessions)
+	if len(sessions.Sessions) != 1 || sessions.Sessions[0].ID != begun.ID {
+		t.Fatalf("sessions = %+v", sessions.Sessions)
+	}
+
+	var list struct {
+		Tasks []taskDTO `json:"tasks"`
+	}
+	call(t, h, "GET", "/api/tasks?execution=awaiting_review", "", &list)
+	if len(list.Tasks) != 1 || list.Tasks[0].SessionID != begun.ID || list.Tasks[0].ExecutionState != mcp.ExecutionAwaitingReview {
+		t.Fatalf("awaiting-review tasks = %+v", list.Tasks)
+	}
+}
+
+func TestSessionIdentityMismatchIs422(t *testing.T) {
+	_, h := newServer(t)
+	var st statusResp
+	call(t, h, "POST", "/api/init", `{"prefix":"WEB"}`, &st)
+	var created taskDTO
+	call(t, h, "POST", "/api/tasks", `{"title":"observable"}`, &created)
+
+	code, body := raw(h, "POST", "/api/tasks/"+created.ID+"/sessions/begin",
+		`{"expectedActor":"agent:codex","idempotencyKey":"begin-1"}`)
+	if code != http.StatusUnprocessableEntity || !strings.Contains(body, "bound") {
+		t.Fatalf("identity mismatch = %d %s", code, body)
 	}
 }
 

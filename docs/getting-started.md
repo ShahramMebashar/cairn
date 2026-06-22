@@ -52,12 +52,13 @@ dirs and the `.gitignore` entry. The prefix defaults to the project folder name,
 with `--actor` and stamped onto every write:
 
 ```sh
-cairn serve --actor agent:claude-1 --repo .
+cairn serve --actor agent:claude-1 --client claude --repo .
 ```
 
 | Flag | Default | Meaning |
 |---|---|---|
 | `--actor` | *(required)* | `agent:<name>` or `human:<name>`; recorded in provenance |
+| `--client` | *(empty)* | agent client identity such as `codex` or `claude` |
 | `--repo` | `.` | repo root containing `.cairn/` |
 
 It then waits on stdin for MCP messages. A client closing the connection (or `Ctrl-C`)
@@ -100,7 +101,8 @@ connection open:
 npx @modelcontextprotocol/inspector ./bin/cairn serve --actor agent:dev --repo .
 ```
 
-Then call `list` (try `ready: true`), `create`, `transition`, etc. from the GUI.
+Then call `identity`, `list` (try `ready: true`), `begin`, `heartbeat`, and `finish`
+from the GUI. See [Agent sessions](agent-sessions.md) for the observable agent loop.
 
 > Don't pipe one-shot JSON into the binary (`echo … | cairn`): closing stdin instantly
 > races the MCP handshake. Use a real client.

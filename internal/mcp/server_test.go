@@ -27,7 +27,7 @@ func TestServerEndToEnd(t *testing.T) {
 	}
 
 	at := time.Date(2026, 6, 21, 9, 0, 0, 0, time.UTC)
-	svc := NewService(store.New(root), "agent:claude-1", func() time.Time { return at })
+	svc := NewServiceWithClient(store.New(root), "agent:claude-1", "claude", func() time.Time { return at })
 	srv := NewServer(svc)
 
 	ctx := context.Background()
@@ -44,7 +44,7 @@ func TestServerEndToEnd(t *testing.T) {
 	}
 	defer cs.Close()
 
-	call := func(name string, args map[string]any) taskOut {
+	callRaw := func(name string, args map[string]any, out any) {
 		t.Helper()
 		res, err := cs.CallTool(ctx, &mcpsdk.CallToolParams{Name: name, Arguments: args})
 		if err != nil {
@@ -53,12 +53,22 @@ func TestServerEndToEnd(t *testing.T) {
 		if res.IsError {
 			t.Fatalf("%s returned tool error: %+v", name, res.Content)
 		}
-		var out taskOut
 		b, _ := json.Marshal(res.StructuredContent)
-		if err := json.Unmarshal(b, &out); err != nil {
+		if err := json.Unmarshal(b, out); err != nil {
 			t.Fatalf("%s decode: %v", name, err)
 		}
+	}
+	call := func(name string, args map[string]any) taskOut {
+		t.Helper()
+		var out taskOut
+		callRaw(name, args, &out)
 		return out
+	}
+
+	var identity Identity
+	callRaw("identity", nil, &identity)
+	if identity.Actor != "agent:claude-1" || identity.Client != "claude" {
+		t.Fatalf("identity = %+v", identity)
 	}
 
 	created := call("create", map[string]any{
@@ -80,5 +90,24 @@ func TestServerEndToEnd(t *testing.T) {
 	}
 	if done.Checks[0].Result != "pass" {
 		t.Fatalf("check result = %q, want pass", done.Checks[0].Result)
+	}
+
+	sessionTask := call("create", map[string]any{"title": "observable"})
+	var begun SessionView
+	callRaw("begin", map[string]any{
+		"id": sessionTask.ID, "expected_actor": "agent:claude-1", "client": "claude", "idempotency_key": "begin-observable",
+	}, &begun)
+	if begun.TaskID != sessionTask.ID || begun.Status != "active" {
+		t.Fatalf("begun session = %+v", begun)
+	}
+	var heartbeat SessionView
+	callRaw("heartbeat", map[string]any{"session": begun.ID, "progress": "testing"}, &heartbeat)
+	if heartbeat.Live == nil || heartbeat.Live.Progress != "testing" {
+		t.Fatalf("heartbeat = %+v", heartbeat)
+	}
+	var finished SessionView
+	callRaw("finish", map[string]any{"session": begun.ID, "summary": "verified"}, &finished)
+	if finished.Status != "finished" {
+		t.Fatalf("finished session = %+v", finished)
 	}
 }

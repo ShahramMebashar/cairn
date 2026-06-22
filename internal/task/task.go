@@ -41,6 +41,8 @@ type Task struct {
 	Priority string  // "" | low | medium | high | urgent
 	Parent   string  // id of the parent task, or ""
 	Rank     float64 // manual board ordering; 0 = unset (falls back to id order)
+	// ActiveAttempt identifies the session attempt currently eligible for review.
+	ActiveAttempt string
 }
 
 // Rules are the config-derived inputs the gate logic needs. They are passed in (rather

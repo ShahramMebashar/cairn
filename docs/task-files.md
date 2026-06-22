@@ -85,7 +85,8 @@ check_timeout_default: 120   # seconds, when a check omits timeout
 
 - `states` are free strings you define — there is no hardcoded status enum.
 - `closed` drives deps-readiness and the checks gate.
-- `counter` is the monotonic id source; the engine increments it under a process mutex.
+- `counter` is the monotonic id source; the engine increments it under the repository-wide
+  advisory write lock.
 
 ## Dependencies
 

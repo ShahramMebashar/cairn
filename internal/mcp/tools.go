@@ -2,22 +2,30 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"cairn/internal/session"
 	"cairn/internal/store"
 	"cairn/internal/task"
 )
 
-// NewServer builds an MCP server exposing the 7 verbs (SPEC §7) over the given Service.
+// NewServer builds the MCP task and observable-session tools over the given Service.
 // The actor identity is already baked into svc; the server itself is identity-agnostic.
 func NewServer(svc *Service) *mcpsdk.Server {
-	srv := mcpsdk.NewServer(&mcpsdk.Implementation{Name: "cairn", Version: "0.0.1"}, nil)
+	srv := mcpsdk.NewServer(&mcpsdk.Implementation{Name: "cairn", Version: ServiceVersion}, nil)
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "identity",
+		Description: "Return this Cairn connection's bound actor and client. Check before session writes."},
+		func(_ context.Context, _ *mcpsdk.CallToolRequest, _ struct{}) (*mcpsdk.CallToolResult, Identity, error) {
+			return nil, svc.Identity(), nil
+		})
 
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "list",
 		Description: "List tasks, optionally filtered by status, assignee, and readiness. ready=true with status=<initial> answers 'what can I start now'."},
 		func(_ context.Context, _ *mcpsdk.CallToolRequest, in listIn) (*mcpsdk.CallToolResult, listOut, error) {
-			views, err := svc.List(in.Status, in.Assignee, in.Ready)
+			views, err := svc.ListWithExecution(in.Status, in.Assignee, in.Ready, in.Execution)
 			if err != nil {
 				return nil, listOut{}, err
 			}
@@ -25,7 +33,8 @@ func NewServer(svc *Service) *mcpsdk.Server {
 			for _, v := range views {
 				out.Tasks = append(out.Tasks, taskOut{ID: v.ID, Title: v.Title, Status: v.Status,
 					Assignee: v.Assignee, Deps: v.Deps, Ready: v.Ready, UpdatedAt: v.UpdatedAt, Rank: v.Rank,
-					Labels: v.Labels, Priority: v.Priority, Parent: v.Parent, Checks: toCheckOut(v.Checks)})
+					Labels: v.Labels, Priority: v.Priority, Parent: v.Parent, ActiveAttempt: v.ActiveAttempt,
+					ExecutionState: v.ExecutionState, SessionID: v.SessionID, Checks: toCheckOut(v.Checks)})
 			}
 			return nil, out, nil
 		})
@@ -123,6 +132,51 @@ func NewServer(svc *Service) *mcpsdk.Server {
 			return nil, svc.view(doc), nil
 		})
 
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "begin",
+		Description: fmt.Sprintf("Begin an observable work session. This connection writes as %s; expected_actor must match exactly. Heartbeat at least every heartbeatIntervalSeconds (from the result) to keep the session from going stale.", svc.actor)},
+		func(ctx context.Context, _ *mcpsdk.CallToolRequest, in beginSessionIn) (*mcpsdk.CallToolResult, SessionView, error) {
+			out, err := svc.BeginSession(ctx, BeginSessionInput{
+				TaskID: in.ID, ExpectedActor: in.ExpectedActor, Client: in.Client, Model: in.Model,
+				Worktree: in.Worktree, Branch: in.Branch, Head: in.Head, IdempotencyKey: in.IdempotencyKey,
+			})
+			return nil, out, err
+		})
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "heartbeat",
+		Description: "Refresh an active session with concise progress and cumulative usage."},
+		func(ctx context.Context, _ *mcpsdk.CallToolRequest, in heartbeatIn) (*mcpsdk.CallToolResult, SessionView, error) {
+			out, err := svc.Heartbeat(ctx, HeartbeatInput{SessionID: in.Session, Progress: in.Progress, Usage: in.Usage.toSession()})
+			return nil, out, err
+		})
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "finish",
+		Description: "Finish an active session with a review summary. This requests review; it never closes the task."},
+		func(ctx context.Context, _ *mcpsdk.CallToolRequest, in finishSessionIn) (*mcpsdk.CallToolResult, SessionView, error) {
+			out, err := svc.FinishSession(ctx, FinishSessionInput{SessionID: in.Session, Summary: in.Summary, Head: in.Head, Usage: in.Usage.toSession()})
+			return nil, out, err
+		})
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "cancel",
+		Description: "Cancel an active session, release its task assignment, and keep the task open."},
+		func(ctx context.Context, _ *mcpsdk.CallToolRequest, in cancelSessionIn) (*mcpsdk.CallToolResult, SessionView, error) {
+			out, err := svc.CancelSession(ctx, CancelSessionInput{SessionID: in.Session, Reason: in.Reason})
+			return nil, out, err
+		})
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "get_session",
+		Description: "Get one durable session with current heartbeat health."},
+		func(_ context.Context, _ *mcpsdk.CallToolRequest, in sessionIDIn) (*mcpsdk.CallToolResult, SessionView, error) {
+			out, err := svc.GetSession(in.Session)
+			return nil, out, err
+		})
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "list_sessions",
+		Description: "List observable sessions newest first, optionally filtered by task, actor, status, or health."},
+		func(_ context.Context, _ *mcpsdk.CallToolRequest, in listSessionsIn) (*mcpsdk.CallToolResult, sessionsOut, error) {
+			views, err := svc.ListSessions(in.Task, in.Actor, in.Status, in.Health)
+			return nil, sessionsOut{Sessions: views}, err
+		})
+
 	return srv
 }
 
@@ -133,9 +187,65 @@ type idIn struct {
 }
 
 type listIn struct {
-	Status   string `json:"status,omitempty" jsonschema:"filter by status"`
-	Assignee string `json:"assignee,omitempty" jsonschema:"filter by assignee, e.g. agent:claude-1"`
-	Ready    *bool  `json:"ready,omitempty" jsonschema:"filter by derived deps-satisfied readiness"`
+	Status    string `json:"status,omitempty" jsonschema:"filter by status"`
+	Assignee  string `json:"assignee,omitempty" jsonschema:"filter by assignee, e.g. agent:claude-1"`
+	Ready     *bool  `json:"ready,omitempty" jsonschema:"filter by derived deps-satisfied readiness"`
+	Execution string `json:"execution,omitempty" jsonschema:"filter by derived execution state: active, stalled, or awaiting_review"`
+}
+
+type beginSessionIn struct {
+	ID             string `json:"id" jsonschema:"task id"`
+	ExpectedActor  string `json:"expected_actor" jsonschema:"actor the caller expects this connection to use; must match identity exactly"`
+	Client         string `json:"client,omitempty" jsonschema:"agent client, e.g. codex or claude"`
+	Model          string `json:"model,omitempty" jsonschema:"model identifier when known"`
+	Worktree       string `json:"worktree,omitempty" jsonschema:"local worktree path"`
+	Branch         string `json:"branch,omitempty" jsonschema:"current Git branch"`
+	Head           string `json:"head,omitempty" jsonschema:"current Git HEAD"`
+	IdempotencyKey string `json:"idempotency_key" jsonschema:"unique retry key for this begin operation"`
+}
+
+type usageIn struct {
+	InputTokens  int64 `json:"input_tokens,omitempty"`
+	OutputTokens int64 `json:"output_tokens,omitempty"`
+	CachedTokens int64 `json:"cached_tokens,omitempty"`
+	ToolCalls    int64 `json:"tool_calls,omitempty"`
+}
+
+func (u usageIn) toSession() session.Usage {
+	return session.Usage{InputTokens: u.InputTokens, OutputTokens: u.OutputTokens, CachedTokens: u.CachedTokens, ToolCalls: u.ToolCalls}
+}
+
+type heartbeatIn struct {
+	Session  string  `json:"session" jsonschema:"session id"`
+	Progress string  `json:"progress,omitempty" jsonschema:"concise current progress, not chain-of-thought"`
+	Usage    usageIn `json:"usage,omitempty"`
+}
+
+type finishSessionIn struct {
+	Session string  `json:"session" jsonschema:"session id"`
+	Summary string  `json:"summary" jsonschema:"review-ready summary of the completed attempt"`
+	Head    string  `json:"head,omitempty" jsonschema:"ending Git HEAD"`
+	Usage   usageIn `json:"usage,omitempty"`
+}
+
+type cancelSessionIn struct {
+	Session string `json:"session" jsonschema:"session id"`
+	Reason  string `json:"reason" jsonschema:"why the attempt was abandoned"`
+}
+
+type sessionIDIn struct {
+	Session string `json:"session" jsonschema:"session id"`
+}
+
+type listSessionsIn struct {
+	Task   string `json:"task,omitempty" jsonschema:"filter by task id"`
+	Actor  string `json:"actor,omitempty" jsonschema:"filter by actor"`
+	Status string `json:"status,omitempty" jsonschema:"filter by durable status"`
+	Health string `json:"health,omitempty" jsonschema:"filter by derived health"`
+}
+
+type sessionsOut struct {
+	Sessions []SessionView `json:"sessions"`
 }
 
 type createIn struct {
@@ -194,20 +304,23 @@ type listOut struct {
 }
 
 type taskOut struct {
-	ID         string             `json:"id"`
-	Title      string             `json:"title"`
-	Status     string             `json:"status"`
-	Assignee   string             `json:"assignee,omitempty"`
-	Deps       []string           `json:"deps,omitempty"`
-	Ready      bool               `json:"ready"`
-	UpdatedAt  string             `json:"updatedAt,omitempty"`
-	Rank       float64            `json:"rank,omitempty"`
-	Labels     []string           `json:"labels,omitempty"`
-	Priority   string             `json:"priority,omitempty"`
-	Parent     string             `json:"parent,omitempty"`
-	Checks     []checkOut         `json:"checks,omitempty"`
-	Provenance []store.Provenance `json:"provenance,omitempty"`
-	Body       string             `json:"body,omitempty"`
+	ID             string             `json:"id"`
+	Title          string             `json:"title"`
+	Status         string             `json:"status"`
+	Assignee       string             `json:"assignee,omitempty"`
+	Deps           []string           `json:"deps,omitempty"`
+	Ready          bool               `json:"ready"`
+	UpdatedAt      string             `json:"updatedAt,omitempty"`
+	Rank           float64            `json:"rank,omitempty"`
+	Labels         []string           `json:"labels,omitempty"`
+	Priority       string             `json:"priority,omitempty"`
+	Parent         string             `json:"parent,omitempty"`
+	ActiveAttempt  string             `json:"activeAttempt,omitempty"`
+	ExecutionState string             `json:"executionState,omitempty"`
+	SessionID      string             `json:"sessionId,omitempty"`
+	Checks         []checkOut         `json:"checks,omitempty"`
+	Provenance     []store.Provenance `json:"provenance,omitempty"`
+	Body           string             `json:"body,omitempty"`
 }
 
 type checkOut struct {
@@ -224,10 +337,12 @@ func (svc *Service) view(doc *store.Doc) taskOut {
 	if n := len(doc.Provenance); n > 0 {
 		updatedAt = doc.Provenance[n-1].At
 	}
+	executionState, sessionID := svc.executionForTask(doc.Task)
 	return taskOut{ID: doc.Task.ID, Title: doc.Task.Title, Status: doc.Task.Status,
 		Assignee: doc.Task.Assignee, Deps: doc.Task.Deps, Ready: svc.ReadyOf(doc.Task),
 		UpdatedAt: updatedAt, Rank: doc.Task.Rank, Labels: doc.Task.Labels, Priority: doc.Task.Priority,
-		Parent: doc.Task.Parent, Checks: toCheckOut(doc.Task.Checks), Provenance: doc.Provenance, Body: doc.Body}
+		Parent: doc.Task.Parent, ActiveAttempt: doc.Task.ActiveAttempt, ExecutionState: executionState,
+		SessionID: sessionID, Checks: toCheckOut(doc.Task.Checks), Provenance: doc.Provenance, Body: doc.Body}
 }
 
 // ReadyOf computes a task's derived readiness best-effort; on a load error it reports

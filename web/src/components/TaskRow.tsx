@@ -3,6 +3,7 @@ import { Assignee } from "@/components/Assignee";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PriorityIcon } from "@/components/PriorityIcon";
+import { SessionStatus } from "@/components/SessionStatus";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -85,6 +86,8 @@ export function TaskRow({
         {task.id}
       </span>
       <span className="flex-1 truncate text-[13px]">{task.title}</span>
+
+      <SessionStatus state={task.executionState} compact />
 
       {task.labels?.slice(0, 2).map((l) => (
         <Badge

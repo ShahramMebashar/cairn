@@ -18,7 +18,11 @@ import (
 	"cairn/internal/config"
 )
 
-const gitignoreEntry = ".cairn/runs/"
+var gitignoreEntries = []string{
+	".cairn/runs/",
+	".cairn/live/",
+	".cairn/write.lock",
+}
 
 // workflowPath is the repo-relative location of the generic task workflow, referenced from
 // the agent docs.
@@ -103,6 +107,8 @@ func Init(root, prefix string) error {
 	for _, dir := range []string{
 		filepath.Join(cairnDir(root), "tasks"),
 		filepath.Join(cairnDir(root), "runs"),
+		filepath.Join(cairnDir(root), "sessions"),
+		filepath.Join(cairnDir(root), "live"),
 	} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return fmt.Errorf("repo: create %s: %w", dir, err)
@@ -126,6 +132,22 @@ func Init(root, prefix string) error {
 		}
 	}
 	return nil
+}
+
+// EnsureSessionDirs creates just the session and live directories and ensures the
+// ephemeral paths stay gitignored. It is the targeted counterpart to Init for the session
+// hot path: a begin call must not rewrite config.yaml or the agent docs, but live/ must
+// still never be committed.
+func EnsureSessionDirs(root string) error {
+	for _, dir := range []string{
+		filepath.Join(cairnDir(root), "sessions"),
+		filepath.Join(cairnDir(root), "live"),
+	} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("repo: create %s: %w", dir, err)
+		}
+	}
+	return ensureGitignore(root)
 }
 
 // ensureWorkflow writes the generic task workflow if absent. It never overwrites an existing
@@ -174,7 +196,7 @@ func ensureWorkflowRef(root, name string) error {
 	return nil
 }
 
-// ensureGitignore appends the runs-dir entry to .gitignore if not already present.
+// ensureGitignore appends Cairn's ephemeral paths when they are not already present.
 func ensureGitignore(root string) error {
 	path := filepath.Join(root, ".gitignore")
 	existing, err := os.ReadFile(path)
@@ -182,15 +204,18 @@ func ensureGitignore(root string) error {
 		return fmt.Errorf("repo: read .gitignore: %w", err)
 	}
 	content := string(existing)
+	existingEntries := make(map[string]bool)
 	for line := range strings.SplitSeq(content, "\n") {
-		if strings.TrimSpace(line) == gitignoreEntry {
-			return nil
-		}
+		existingEntries[strings.TrimSpace(line)] = true
 	}
 	if len(content) > 0 && !strings.HasSuffix(content, "\n") {
 		content += "\n"
 	}
-	content += gitignoreEntry + "\n"
+	for _, entry := range gitignoreEntries {
+		if !existingEntries[entry] {
+			content += entry + "\n"
+		}
+	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		return fmt.Errorf("repo: write .gitignore: %w", err)
 	}

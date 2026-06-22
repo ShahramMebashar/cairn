@@ -38,7 +38,7 @@ func TestInitCreatesScaffold(t *testing.T) {
 	}
 
 	// Dirs exist.
-	for _, d := range []string{".cairn/tasks", ".cairn/runs"} {
+	for _, d := range []string{".cairn/tasks", ".cairn/runs", ".cairn/sessions", ".cairn/live"} {
 		if fi, err := os.Stat(filepath.Join(root, d)); err != nil || !fi.IsDir() {
 			t.Fatalf("missing dir %s: %v", d, err)
 		}
@@ -51,10 +51,12 @@ func TestInitCreatesScaffold(t *testing.T) {
 	if cfg.Prefix != "MYP" || cfg.Initial != "backlog" {
 		t.Fatalf("bad config: %+v", cfg)
 	}
-	// .gitignore ignores the runs dir.
+	// .gitignore ignores every ephemeral Cairn path.
 	gi, _ := os.ReadFile(filepath.Join(root, ".gitignore"))
-	if !strings.Contains(string(gi), ".cairn/runs/") {
-		t.Fatalf(".gitignore missing runs entry:\n%s", gi)
+	for _, entry := range gitignoreEntries {
+		if !strings.Contains(string(gi), entry) {
+			t.Fatalf(".gitignore missing %q:\n%s", entry, gi)
+		}
 	}
 }
 
@@ -93,8 +95,10 @@ func TestInitIdempotent(t *testing.T) {
 	}
 	// .gitignore not duplicated.
 	gi, _ := os.ReadFile(filepath.Join(root, ".gitignore"))
-	if n := strings.Count(string(gi), ".cairn/runs/"); n != 1 {
-		t.Fatalf(".gitignore entry appears %d times, want 1", n)
+	for _, entry := range gitignoreEntries {
+		if n := strings.Count(string(gi), entry); n != 1 {
+			t.Fatalf(".gitignore entry %q appears %d times, want 1", entry, n)
+		}
 	}
 }
 

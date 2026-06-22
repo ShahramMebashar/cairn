@@ -3,11 +3,13 @@ package mcp
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
 	"cairn/internal/check"
 	"cairn/internal/config"
+	"cairn/internal/session"
 	"cairn/internal/store"
 	"cairn/internal/task"
 )
@@ -19,23 +21,29 @@ var ErrAlreadyClaimed = errors.New("task already claimed by another actor")
 // by the engine (RunChecks), never attested.
 var ErrNotManual = errors.New("cannot attest a command check; it is run by the engine")
 
-// Service implements the 7 verbs (SPEC §7) as thin orchestration over store + task +
+// Service implements task and session tools as thin orchestration over store + task +
 // check. Gate logic is never reimplemented here — it calls task.Ready / task.CanTransition.
 // Identity (actor) is fixed at construction, not passed per call; every write stamps a
 // provenance entry with it.
 type Service struct {
-	store *store.Store
-	actor string
-	now   func() time.Time
+	store  *store.Store
+	actor  string
+	client string
+	now    func() time.Time
 }
 
 // NewService binds the verbs to a store and an actor identity. now is injectable for
 // deterministic provenance timestamps; nil uses the wall clock.
 func NewService(s *store.Store, actor string, now func() time.Time) *Service {
+	return NewServiceWithClient(s, actor, "", now)
+}
+
+// NewServiceWithClient binds the verbs to a store, actor, and declared client identity.
+func NewServiceWithClient(s *store.Store, actor, client string, now func() time.Time) *Service {
 	if now == nil {
 		now = time.Now
 	}
-	return &Service{store: s, actor: actor, now: now}
+	return &Service{store: s, actor: actor, client: client, now: now}
 }
 
 func rulesOf(c config.Config) task.Rules {
@@ -46,14 +54,21 @@ func rulesOf(c config.Config) task.Rules {
 // last-activity timestamp (newest provenance entry) for "updated X ago" displays.
 type TaskView struct {
 	task.Task
-	Ready     bool   `json:"ready"`
-	UpdatedAt string `json:"updatedAt,omitempty"`
+	Ready          bool   `json:"ready"`
+	UpdatedAt      string `json:"updatedAt,omitempty"`
+	ExecutionState string `json:"executionState,omitempty"`
+	SessionID      string `json:"sessionId,omitempty"`
 }
 
 // List returns tasks, optionally filtered by status, assignee, and readiness. A nil
 // ready pointer means "don't filter on readiness". list(ready=true, status=initial) is
 // the agent's "what can I start now" query (SPEC §7).
 func (svc *Service) List(status, assignee string, ready *bool) ([]TaskView, error) {
+	return svc.ListWithExecution(status, assignee, ready, "")
+}
+
+// ListWithExecution adds an optional derived execution-state filter.
+func (svc *Service) ListWithExecution(status, assignee string, ready *bool, execution string) ([]TaskView, error) {
 	docs, err := svc.store.ListDocs()
 	if err != nil {
 		return nil, err
@@ -63,6 +78,16 @@ func (svc *Service) List(status, assignee string, ready *bool) ([]TaskView, erro
 		return nil, err
 	}
 	rules := rulesOf(cfg)
+	sessionDocs, err := svc.store.ListSessions()
+	if err != nil {
+		return nil, err
+	}
+	latestSession := make(map[string]*store.SessionDoc)
+	for _, d := range sessionDocs {
+		if latestSession[d.Session.TaskID] == nil {
+			latestSession[d.Session.TaskID] = d
+		}
+	}
 
 	all := make(map[string]task.Task, len(docs))
 	for _, d := range docs {
@@ -82,10 +107,40 @@ func (svc *Service) List(status, assignee string, ready *bool) ([]TaskView, erro
 		if ready != nil && *ready != r {
 			continue
 		}
-		out = append(out, TaskView{Task: t, Ready: r, UpdatedAt: lastActivity(d)})
+		executionState, sessionID, err := svc.executionFor(t, latestSession[t.ID], cfg)
+		if err != nil {
+			return nil, err
+		}
+		if execution != "" && execution != executionState {
+			continue
+		}
+		out = append(out, TaskView{Task: t, Ready: r, UpdatedAt: lastActivity(d), ExecutionState: executionState, SessionID: sessionID})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out, nil
+}
+
+func (svc *Service) executionFor(t task.Task, d *store.SessionDoc, cfg config.Config) (string, string, error) {
+	if d == nil || d.Session.AttemptID != t.ActiveAttempt {
+		return "", "", nil
+	}
+	switch d.Session.Status {
+	case session.StatusActive:
+		live, err := svc.store.ReadLive(d.Session.ID)
+		if err != nil {
+			return "", "", err
+		}
+		health := session.DeriveHealth(d.Session, live, svc.now(), cfg.SessionStaleDuration())
+		if health == session.HealthStalled {
+			return ExecutionStalled, d.Session.ID, nil
+		}
+		return ExecutionActive, d.Session.ID, nil
+	case session.StatusFinished:
+		if !slices.Contains(cfg.Closed, t.Status) {
+			return ExecutionAwaitingReview, d.Session.ID, nil
+		}
+	}
+	return "", d.Session.ID, nil
 }
 
 // lastActivity returns the timestamp of the newest provenance entry, or "" if none.

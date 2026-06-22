@@ -35,6 +35,8 @@ import { MarkdownEditor } from "@/components/MarkdownEditor";
 import { LogView } from "@/components/LogView";
 import { Input } from "@/components/ui/input";
 import { PriorityIcon, PRIORITIES, priorityLabel } from "@/components/PriorityIcon";
+import { SessionStatus } from "@/components/SessionStatus";
+import { SessionTimeline } from "@/components/SessionTimeline";
 import {
   useAddNote,
   useAttest,
@@ -42,6 +44,7 @@ import {
   useRunChecks,
   useRuns,
   useTask,
+  useTaskSessions,
   useTasks,
   useTransition,
   useUpdateTask,
@@ -67,6 +70,7 @@ export function TaskDetail({
   const { data: task, isLoading } = useTask(path, id);
   const { data: runs } = useRuns(path, id);
   const { data: allTasks } = useTasks(path);
+  const { data: sessions, isLoading: sessionsLoading } = useTaskSessions(path, id);
   const claim = useClaim(path);
   const transition = useTransition(path);
   const runChecks = useRunChecks(path);
@@ -147,6 +151,12 @@ export function TaskDetail({
               />
 
               {task.body?.trim() && <Markdown className="mt-5">{task.body.trim()}</Markdown>}
+
+              <SessionTimeline
+                sessions={sessions ?? []}
+                executionState={task.executionState}
+                loading={sessionsLoading}
+              />
 
               {/* Activity */}
               <section className="mt-10">
@@ -240,6 +250,12 @@ export function TaskDetail({
                 </Button>
               )}
             </Prop>
+
+            {task.executionState && (
+              <Prop label="Execution">
+                <SessionStatus state={task.executionState} />
+              </Prop>
+            )}
 
             <Prop label="Ready">
               {task.ready ? (

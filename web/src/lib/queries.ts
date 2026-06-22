@@ -16,6 +16,7 @@ import type { CreateInput } from "./api";
 const tasksKey = (path: string) => ["tasks", path] as const;
 const taskKey = (path: string, id: string) => ["task", path, id] as const;
 const runsKey = (path: string, id: string) => ["runs", path, id] as const;
+const sessionsKey = (path: string, id?: string) => ["sessions", path, ...(id ? [id] : [])] as const;
 
 export function useStatus(path: string | null) {
   return useQuery({
@@ -46,6 +47,14 @@ export function useRuns(path: string, id: string | null) {
   });
 }
 
+export function useTaskSessions(path: string, id: string | null) {
+  return useQuery({
+    queryKey: sessionsKey(path, id ?? ""),
+    queryFn: () => api.listTaskSessions(path, id as string),
+    enabled: !!id,
+  });
+}
+
 // useTaskEvents subscribes to the server's SSE stream for `path` and invalidates the
 // affected React Query caches, so the board and open task reflect changes made by ANY
 // actor (including MCP agents in another process), not just this UI's own mutations. One
@@ -55,7 +64,7 @@ export function useTaskEvents(path: string) {
   useEffect(() => {
     const es = new EventSource(`/api/events?path=${encodeURIComponent(path)}`);
     es.onmessage = (e) => {
-      let msg: { type: string; id?: string };
+      let msg: { type: string; id?: string; session?: string };
       try {
         msg = JSON.parse(e.data);
       } catch {
@@ -67,6 +76,13 @@ export function useTaskEvents(path: string) {
       if (msg.type === "task-changed" && msg.id) {
         qc.invalidateQueries({ queryKey: taskKey(path, msg.id) });
         qc.invalidateQueries({ queryKey: runsKey(path, msg.id) });
+        qc.invalidateQueries({ queryKey: sessionsKey(path, msg.id) });
+      }
+      if (msg.type === "session-changed") {
+        qc.invalidateQueries({ queryKey: sessionsKey(path) });
+        // Session events carry the session id, not the task id. Refresh open task
+        // projections so execution state cannot lag behind the session timeline.
+        qc.invalidateQueries({ queryKey: ["task", path] });
       }
     };
     return () => es.close();

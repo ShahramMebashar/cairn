@@ -1,0 +1,9 @@
+[mcp_servers.cairn]
+command = "/Users/shaho/Projects/cairn/bin/cairn"
+args = [
+    "serve",
+    "--actor",
+    "agent:claude",
+    "--repo",
+    "/Users/shaho/Projects/cairn",
+]

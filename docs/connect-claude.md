@@ -19,7 +19,7 @@ Use **absolute paths** in all configs below (`$(pwd)` expands to your repo root)
 The quickest path — `claude mcp add`:
 
 ```sh
-claude mcp add cairn -- "$(pwd)/bin/cairn" serve --actor agent:claude-1 --repo "$(pwd)"
+claude mcp add cairn -- "$(pwd)/bin/cairn" serve --actor agent:claude-1 --client claude --repo "$(pwd)"
 ```
 
 Verify and inspect:
@@ -29,11 +29,11 @@ claude mcp list
 claude mcp get cairn
 ```
 
-Then in a session, the 7 verbs appear as tools. Try:
+Then Cairn's task and session tools appear. Start by checking the bound identity:
 
-> List the ready cairn tasks.
-> Create a task titled "wire up logging" that depends on PROJ-001.
-> Transition PROJ-003 to done.
+> Call Cairn identity, then list the ready tasks.
+> Begin an observable session for PROJ-003 using the returned actor.
+> Send a heartbeat with a concise progress update.
 
 Remove it with `claude mcp remove cairn`.
 
@@ -47,7 +47,7 @@ root instead:
   "mcpServers": {
     "cairn": {
       "command": "bin/cairn",
-      "args": ["serve", "--actor", "agent:claude-1", "--repo", "."]
+      "args": ["serve", "--actor", "agent:claude-1", "--client", "claude", "--repo", "."]
     }
   }
 }
@@ -70,7 +70,7 @@ Edit the MCP config file:
   "mcpServers": {
     "cairn": {
       "command": "/ABSOLUTE/PATH/TO/cairn/bin/cairn",
-      "args": ["serve", "--actor", "agent:claude-1", "--repo", "/ABSOLUTE/PATH/TO/cairn"]
+      "args": ["serve", "--actor", "agent:claude-1", "--client", "claude", "--repo", "/ABSOLUTE/PATH/TO/cairn"]
     }
   }
 }
@@ -91,6 +91,10 @@ distinct actor per agent/human so the audit trail is meaningful:
 Reads never write provenance; every write (create, claim, transition, run_checks, note)
 appends one entry stamped with this actor and a timestamp.
 
+Session-aware clients should call `identity` before `begin` and pass its exact `actor` as
+`expected_actor`. Cairn rejects a mismatch before writing anything, preventing a client
+configured as one agent from silently recording work as another.
+
 ---
 
 ## Troubleshooting
@@ -98,6 +102,8 @@ appends one entry stamped with this actor and a timestamp.
 - **Tools don't appear / server fails to start:** the `command` path must be absolute (or
   repo-relative for project `.mcp.json`) and the binary must exist — run `make build`.
 - **"--actor is required":** add `--actor agent:<name>` to `args`.
+- **`expected_actor` mismatch:** call `identity`; either use the actor it returns or fix the
+  MCP server's `--actor` configuration. Do not guess or silently substitute identities.
 - **Workspace not set up:** `cairn serve` auto-initializes `.cairn/` on first run, so
   this is rarely an issue. To set it up explicitly, run `cairn init --repo <dir>` (see
   [getting-started.md](getting-started.md)).

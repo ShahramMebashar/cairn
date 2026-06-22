@@ -38,7 +38,7 @@ export default function App() {
 }
 
 // --- routing: #/<workspace-slug>/<view> ---
-//   #/cairn            -> all tasks      #/cairn/active|backlog|ready
+//   #/cairn            -> all tasks      #/cairn/active|stalled|review|backlog|ready
 //   #/cairn/task/ACME-004
 type View =
   | { kind: "list"; filter: Filter }
@@ -47,7 +47,7 @@ type View =
   | { kind: "board" };
 type Route = { slug: string | null; view: View };
 
-const FILTERS: Filter[] = ["all", "active", "backlog", "ready"];
+const FILTERS: Filter[] = ["all", "active", "stalled", "review", "backlog", "ready"];
 
 function parseHash(): Route {
   const parts = window.location.hash
