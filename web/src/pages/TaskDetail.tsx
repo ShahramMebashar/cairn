@@ -150,33 +150,12 @@ export function TaskDetail({
 
               {/* Activity */}
               <section className="mt-10">
-                <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <h2 className="text-xs font-medium text-muted-foreground">
                   Activity
                 </h2>
                 <ol className="mt-3 space-y-3.5">
                   {(task.provenance ?? []).map((p, i) => (
-                    <li key={i} className="flex gap-2.5">
-                      <Avatar className="mt-0.5 size-6 shrink-0">
-                        <AvatarFallback className="text-[9px]">{initials(p.who)}</AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-baseline gap-1.5">
-                          <span className="text-sm font-medium">{p.who}</span>
-                          <span className="truncate text-xs text-muted-foreground">{p.did}</span>
-                          <span
-                            className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums"
-                            title={new Date(p.at).toLocaleString()}
-                          >
-                            {timeAgo(p.at)}
-                          </span>
-                        </div>
-                        {p.text && (
-                          <div className="mt-1.5 rounded-lg border bg-muted/40 px-3 py-2">
-                            <Markdown>{p.text}</Markdown>
-                          </div>
-                        )}
-                      </div>
-                    </li>
+                    <ActivityEntry key={i} entry={p} />
                   ))}
                 </ol>
 
@@ -398,7 +377,7 @@ function Prop({
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</h3>
+        <h3 className="text-xs font-medium text-muted-foreground">{label}</h3>
         {action}
       </div>
       {children}
@@ -510,7 +489,7 @@ function SubTasks({
   return (
     <section className="mt-6">
       <div className="flex items-center justify-between">
-        <h2 className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <h2 className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
           Sub-tasks
           {children.length > 0 && (
             <span className="tabular-nums">
@@ -585,5 +564,66 @@ function LabelsEditor({
         className="h-7 text-xs"
       />
     </div>
+  );
+}
+
+type ProvEntry = { who: string; did: string; at: string; text?: string };
+
+// ActivityEntry renders one provenance row. Entries that carry a note body are collapsible
+// (collapsed by default, with a one-line preview) so long notes don't flood the log.
+function ActivityEntry({ entry }: { entry: ProvEntry }) {
+  const [open, setOpen] = useState(false);
+  const note = entry.text?.trim();
+  const preview = note ? (note.split("\n").find((l) => l.trim()) ?? "") : "";
+  return (
+    <li className="flex gap-2">
+      {/* chevron gutter — reserved on every row so avatars/names stay aligned */}
+      <button
+        aria-label={open ? "Collapse note" : "Expand note"}
+        onClick={note ? () => setOpen((o) => !o) : undefined}
+        className={cn(
+          "flex h-6 w-3.5 shrink-0 items-center justify-center",
+          !note && "pointer-events-none",
+        )}
+      >
+        {note && (
+          <ChevronRight
+            className={cn(
+              "size-3.5 text-muted-foreground transition-transform",
+              open && "rotate-90",
+            )}
+          />
+        )}
+      </button>
+      <Avatar className="size-6 shrink-0">
+        <AvatarFallback className="text-[9px]">{initials(entry.who)}</AvatarFallback>
+      </Avatar>
+      <div className="min-w-0 flex-1">
+        <div
+          className={cn(
+            "flex min-h-6 items-center gap-1.5",
+            note && "cursor-pointer select-none",
+          )}
+          onClick={note ? () => setOpen((o) => !o) : undefined}
+        >
+          <span className="shrink-0 text-sm font-medium">{entry.who}</span>
+          <span className="shrink-0 text-xs text-muted-foreground">{entry.did}</span>
+          {note && !open && (
+            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground/80">{preview}</span>
+          )}
+          <span
+            className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums"
+            title={new Date(entry.at).toLocaleString()}
+          >
+            {timeAgo(entry.at)}
+          </span>
+        </div>
+        {note && open && (
+          <div className="mt-1.5 rounded-lg border bg-muted/40 px-3 py-2">
+            <Markdown>{entry.text!}</Markdown>
+          </div>
+        )}
+      </div>
+    </li>
   );
 }
