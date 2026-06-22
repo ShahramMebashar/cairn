@@ -1,0 +1,8 @@
+# Check-run output logs (SPEC §1, §6): full output stays out of git; tasks store only result:.
+.cairn/runs/
+
+# Build artifacts
+bin/
+
+.DS_Store
+node_modules/

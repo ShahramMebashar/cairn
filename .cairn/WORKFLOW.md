@@ -1,0 +1,53 @@
+# Task workflow
+
+This repo tracks its work with **cairn** — the task graph lives as files under `.cairn/`.
+Every non-trivial change is a task, driven through its lifecycle. Drive tasks with cairn's
+MCP tools (as an agent) or the web UI (as a human); both go through the same rules.
+
+## Lifecycle
+
+States are defined in `.cairn/config.yaml` (default `backlog → in_progress → in_review →
+done | canceled`; closed: `done`, `canceled`). Transitions are free except two gates:
+
+- **deps gate** — a task can't leave the initial state until every dependency is closed
+  (its `ready` flag reflects this).
+- **checks gate** — moving into a closed state auto-runs the task's `cmd` checks and
+  **refuses** if any fail. Manual checks (no `cmd`) must be attested first.
+
+## The agent loop
+
+1. **Find work** — list ready tasks in the initial state ("what can I start now").
+2. **Claim** — set yourself as the assignee.
+3. **Start** — transition to the first working state (e.g. `in_progress`).
+4. **Build** — make the change; write the test first where it applies.
+5. **Note as you go** — add a short provenance note at each meaningful step.
+6. **Run checks** — run the task's checks before closing.
+7. **Close** — transition to a closed state; the checks gate runs and refuses on failure.
+
+## Note discipline
+
+Provenance is the task's memory. Add a **concise** note (a sentence or two) whenever you:
+
+- make or change a design decision (and why the alternative was rejected),
+- deviate from the task's stated intent,
+- discover a constraint (a frozen spec, an API limitation),
+- hand off, block, or pause (what's left, what's blocking),
+- finish — a closing note naming the files touched, the key decision, and how you verified.
+
+Don't note the obvious ("started coding", restating the title) or anything the diff already
+says plainly. If a reader of only the provenance couldn't follow the story, you under-noted;
+if every entry restates the obvious, you over-noted.
+
+## Authoring tasks
+
+- **Title** — imperative and specific.
+- **Body** — intent plus a short checklist; link specs instead of duplicating them. Markdown
+  is supported (code blocks are highlighted).
+- **Checks** — prefer real commands that actually gate quality; use a `manual` check for what
+  a command can't verify. A task carrying a pending manual check parks until it's attested.
+- **Deps** — wire real ordering so `ready` means it. Deps must already exist at create time.
+- Ids are engine-assigned and **monotonic** — deleting a task file never recycles its id.
+
+## Friction log
+
+Tool-improvement feedback from dogfooding lives in [FRICTION.md](FRICTION.md).

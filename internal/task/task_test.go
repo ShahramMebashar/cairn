@@ -1,0 +1,268 @@
+package task
+
+import (
+	"errors"
+	"testing"
+)
+
+// rules mirrors the example config (SPEC §3): backlog is initial; done/canceled are closed.
+var rules = Rules{
+	Initial: "backlog",
+	Closed:  []string{"done", "canceled"},
+	States:  []string{"backlog", "in_progress", "in_review", "done", "canceled"},
+}
+
+// closedTask is a tiny helper to build a dep that sits in a given state.
+func mk(id, status string) Task { return Task{ID: id, Status: status} }
+
+func graph(ts ...Task) map[string]Task {
+	m := make(map[string]Task, len(ts))
+	for _, t := range ts {
+		m[t.ID] = t
+	}
+	return m
+}
+
+func passCheck() Check    { return Check{Desc: "auto", Cmd: "true", Result: "pass"} }
+func pendingCheck() Check { return Check{Desc: "auto", Cmd: "true", Result: "pending"} }
+func failCheck() Check    { return Check{Desc: "auto", Cmd: "false", Result: "fail"} }
+func manualPending() Check {
+	return Check{Desc: "human review", Type: "manual", Result: "pending"}
+}
+
+func TestCanTransition(t *testing.T) {
+	tests := []struct {
+		name string
+		task Task
+		to   string
+		all  map[string]Task
+		want error // sentinel expected via errors.Is; nil = allowed
+	}{
+		// --- deps gate: cannot leave initial until all deps closed (SPEC §4, §5.1) ---
+		{
+			name: "leave initial with open dep is blocked",
+			task: Task{ID: "T", Status: "backlog", Deps: []string{"D"}},
+			to:   "in_progress",
+			all:  graph(mk("D", "in_progress")),
+			want: ErrDepsNotClosed,
+		},
+		{
+			name: "leave initial with closed dep is allowed",
+			task: Task{ID: "T", Status: "backlog", Deps: []string{"D"}},
+			to:   "in_progress",
+			all:  graph(mk("D", "done")),
+			want: nil,
+		},
+		{
+			name: "leave initial with no deps is allowed",
+			task: Task{ID: "T", Status: "backlog"},
+			to:   "in_progress",
+			all:  graph(),
+			want: nil,
+		},
+		{
+			name: "stay in initial is a free no-op even with open deps",
+			task: Task{ID: "T", Status: "backlog", Deps: []string{"D"}},
+			to:   "backlog",
+			all:  graph(mk("D", "in_progress")),
+			want: nil,
+		},
+
+		// --- checks gate: cannot enter a closed state unless all checks pass (SPEC §5.2) ---
+		{
+			name: "close with a pending check is blocked",
+			task: Task{ID: "T", Status: "in_review", Checks: []Check{pendingCheck()}},
+			to:   "done",
+			all:  graph(),
+			want: ErrChecksNotPassed,
+		},
+		{
+			name: "close with a failing check is blocked",
+			task: Task{ID: "T", Status: "in_review", Checks: []Check{passCheck(), failCheck()}},
+			to:   "done",
+			all:  graph(),
+			want: ErrChecksNotPassed,
+		},
+		{
+			name: "close with all checks passing is allowed",
+			task: Task{ID: "T", Status: "in_review", Checks: []Check{passCheck(), passCheck()}},
+			to:   "done",
+			all:  graph(),
+			want: nil,
+		},
+		{
+			name: "close with zero checks passes vacuously",
+			task: Task{ID: "T", Status: "in_review"},
+			to:   "done",
+			all:  graph(),
+			want: nil,
+		},
+		{
+			name: "close with a pending manual check is blocked",
+			task: Task{ID: "T", Status: "in_review", Checks: []Check{manualPending()}},
+			to:   "canceled",
+			all:  graph(),
+			want: ErrChecksNotPassed,
+		},
+
+		// --- free intermediate transitions: no gate applies (SPEC §5) ---
+		{
+			name: "non-initial to non-closed is free even with open deps",
+			task: Task{ID: "T", Status: "in_progress", Deps: []string{"D"}},
+			to:   "in_review",
+			all:  graph(mk("D", "in_progress")),
+			want: nil,
+		},
+
+		// --- combined: leaving initial straight into closed applies BOTH gates (SPEC §5) ---
+		{
+			name: "backlog to done directly with both gates passing",
+			task: Task{ID: "T", Status: "backlog", Deps: []string{"D"}, Checks: []Check{passCheck()}},
+			to:   "done",
+			all:  graph(mk("D", "done")),
+			want: nil,
+		},
+		{
+			name: "backlog to done blocked by deps gate first",
+			task: Task{ID: "T", Status: "backlog", Deps: []string{"D"}, Checks: []Check{passCheck()}},
+			to:   "done",
+			all:  graph(mk("D", "in_progress")),
+			want: ErrDepsNotClosed,
+		},
+		{
+			name: "backlog to done blocked by checks gate when deps satisfied",
+			task: Task{ID: "T", Status: "backlog", Deps: []string{"D"}, Checks: []Check{failCheck()}},
+			to:   "done",
+			all:  graph(mk("D", "done")),
+			want: ErrChecksNotPassed,
+		},
+
+		// --- reopen is free; check results retained, so re-close reuses them (SPEC §5) ---
+		{
+			name: "reopen closed task is a free transition",
+			task: Task{ID: "T", Status: "done", Checks: []Check{passCheck()}},
+			to:   "in_progress",
+			all:  graph(),
+			want: nil,
+		},
+		{
+			name: "re-close after reopen reuses retained passing results",
+			task: Task{ID: "T", Status: "in_progress", Checks: []Check{passCheck()}},
+			to:   "done",
+			all:  graph(),
+			want: nil,
+		},
+
+		// --- unknown target state (SPEC §3: states are the only valid targets) ---
+		{
+			name: "unknown target state is rejected",
+			task: Task{ID: "T", Status: "backlog"},
+			to:   "shipped",
+			all:  graph(),
+			want: ErrUnknownState,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := CanTransition(tt.task, tt.to, tt.all, rules)
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("CanTransition(%q -> %q) = %v, want errors.Is %v", tt.task.Status, tt.to, err, tt.want)
+			}
+		})
+	}
+}
+
+func TestReady(t *testing.T) {
+	tests := []struct {
+		name string
+		task Task
+		all  map[string]Task
+		want bool
+	}{
+		{
+			name: "no deps is ready",
+			task: Task{ID: "T"},
+			all:  graph(),
+			want: true,
+		},
+		{
+			name: "all deps closed is ready",
+			task: Task{ID: "T", Deps: []string{"A", "B"}},
+			all:  graph(mk("A", "done"), mk("B", "canceled")),
+			want: true,
+		},
+		{
+			name: "one open dep is not ready",
+			task: Task{ID: "T", Deps: []string{"A", "B"}},
+			all:  graph(mk("A", "done"), mk("B", "in_progress")),
+			want: false,
+		},
+		{
+			name: "missing dep is not ready (defensive; real dangling is a load error)",
+			task: Task{ID: "T", Deps: []string{"A", "GHOST"}},
+			all:  graph(mk("A", "done")),
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := Ready(tt.task, tt.all, rules); got != tt.want {
+				t.Fatalf("Ready = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateDeps(t *testing.T) {
+	tests := []struct {
+		name string
+		all  map[string]Task
+		want error
+	}{
+		{
+			name: "valid DAG",
+			all:  graph(Task{ID: "A"}, Task{ID: "B", Deps: []string{"A"}}, Task{ID: "C", Deps: []string{"A", "B"}}),
+			want: nil,
+		},
+		{
+			name: "dangling dep",
+			all:  graph(Task{ID: "A", Deps: []string{"GHOST"}}),
+			want: ErrDanglingDep,
+		},
+		{
+			name: "two-node cycle",
+			all:  graph(Task{ID: "A", Deps: []string{"B"}}, Task{ID: "B", Deps: []string{"A"}}),
+			want: ErrCycle,
+		},
+		{
+			name: "self loop",
+			all:  graph(Task{ID: "A", Deps: []string{"A"}}),
+			want: ErrCycle,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := ValidateDeps(tt.all); !errors.Is(err, tt.want) {
+				t.Fatalf("ValidateDeps = %v, want errors.Is %v", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateParents(t *testing.T) {
+	if err := ValidateParents(graph(Task{ID: "A"}, Task{ID: "B", Parent: "A"})); err != nil {
+		t.Fatalf("valid parent: %v", err)
+	}
+	if err := ValidateParents(graph(Task{ID: "A", Parent: "GHOST"})); !errors.Is(err, ErrParentMissing) {
+		t.Fatalf("missing parent: %v", err)
+	}
+	if err := ValidateParents(graph(Task{ID: "A", Parent: "A"})); !errors.Is(err, ErrParentCycle) {
+		t.Fatalf("self parent: %v", err)
+	}
+	if err := ValidateParents(graph(Task{ID: "A", Parent: "B"}, Task{ID: "B", Parent: "A"})); !errors.Is(err, ErrParentCycle) {
+		t.Fatalf("parent cycle: %v", err)
+	}
+}

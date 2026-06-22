@@ -1,0 +1,287 @@
+// Real-time board sync. The web server watches the file-based store so changes made by
+// ANY actor — including MCP agents in a separate process — push to connected UIs over SSE.
+// This file holds the transport-agnostic core: the Event type and the debouncing
+// coalescer. The fsnotify wiring and per-root subscriber Hub live alongside it.
+package server
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/fsnotify/fsnotify"
+)
+
+// sseHeartbeat is how often a comment line is sent to keep idle connections (and proxies)
+// from timing out. EventSource clients ignore comment lines.
+const sseHeartbeat = 15 * time.Second
+
+// handleEvents streams store changes to one client as Server-Sent Events. It subscribes to
+// the resolved root's watcher before writing headers (so no change is missed between the
+// handshake and the first read) and tears the subscription down on disconnect. Uses ?path=
+// like every other endpoint (the design doc's ?root= predates that convention).
+func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
+	root, err := s.resolveRoot(r.URL.Query().Get("path"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errBody(err))
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	ch, cancel, err := s.hub.Subscribe(root)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	defer cancel()
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+	// Immediately prove the stream is live so an idle connection doesn't look dead while
+	// waiting for the first change or heartbeat. EventSource ignores comment lines.
+	fmt.Fprint(w, ": connected\n\n")
+	flusher.Flush()
+
+	ticker := time.NewTicker(sseHeartbeat)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return // client disconnected / server shutting down
+		case e := <-ch:
+			b, _ := json.Marshal(e)
+			fmt.Fprintf(w, "data: %s\n\n", b)
+			flusher.Flush()
+		case <-ticker.C:
+			fmt.Fprint(w, ": ping\n\n")
+			flusher.Flush()
+		}
+	}
+}
+
+// Event is the signal sent to a subscriber. It carries no task data: the client refetches
+// via the REST endpoints, reusing the existing DTOs so the stream can't drift from them.
+type Event struct {
+	Type string `json:"type"`         // evtTaskChanged | evtTasksChanged
+	ID   string `json:"id,omitempty"` // set only for evtTaskChanged
+}
+
+const (
+	evtTaskChanged  = "task-changed"  // one task file changed; client refetches that task
+	evtTasksChanged = "tasks-changed" // list membership / config / multiple changed
+)
+
+// classify maps a changed path to its impact. kind is one of the constants below.
+const (
+	kindIgnore = iota
+	kindTask
+	kindList
+)
+
+func classify(path string) (id string, kind int) {
+	base := filepath.Base(path)
+	switch {
+	case strings.HasPrefix(base, ".tmp-"):
+		return "", kindIgnore // atomic-write temp file (store.atomicWrite)
+	case base == "config.yaml":
+		return "", kindList // board states changed
+	case strings.HasSuffix(base, ".md"):
+		return strings.TrimSuffix(base, ".md"), kindTask
+	default:
+		return "", kindIgnore
+	}
+}
+
+// coalesce consumes raw changed-file paths, debounces them by d, and emits one Event per
+// quiet window. A single atomic save fans out into several raw fs events (temp create,
+// rename, chmod); debouncing collapses them. One task touched in a window -> task-changed;
+// anything else (config, multiple tasks) -> tasks-changed. It returns when in is closed.
+func coalesce(in <-chan string, d time.Duration, emit func(Event)) {
+	timer := time.NewTimer(d)
+	timer.Stop()
+
+	ids := map[string]struct{}{}
+	listLevel := false
+	armed := false
+
+	reset := func() {
+		ids = map[string]struct{}{}
+		listLevel = false
+		armed = false
+	}
+
+	for {
+		select {
+		case path, ok := <-in:
+			if !ok {
+				return
+			}
+			id, kind := classify(path)
+			switch kind {
+			case kindIgnore:
+				continue
+			case kindList:
+				listLevel = true
+			case kindTask:
+				ids[id] = struct{}{}
+			}
+			if !armed {
+				armed = true
+			}
+			timer.Reset(d) // trailing debounce: last event in a burst wins
+		case <-timer.C:
+			if !armed {
+				continue
+			}
+			emit(buildEvent(ids, listLevel))
+			reset()
+		}
+	}
+}
+
+func buildEvent(ids map[string]struct{}, listLevel bool) Event {
+	if listLevel || len(ids) != 1 {
+		return Event{Type: evtTasksChanged}
+	}
+	for id := range ids {
+		return Event{Type: evtTaskChanged, ID: id}
+	}
+	return Event{Type: evtTasksChanged} // unreachable: len(ids)==1 above
+}
+
+// Hub fans filesystem changes out to SSE subscribers. It keeps one fsnotify watcher per
+// project root, started on the first subscriber for that root and stopped when the last
+// one leaves (ref-counted), so idle projects are not watched.
+type Hub struct {
+	debounce time.Duration
+
+	mu     sync.Mutex
+	roots  map[string]*rootWatch
+	nextID int
+}
+
+// NewHub returns a Hub. debounce is the quiet window used to coalesce a save's event burst;
+// pass 0 to use the default.
+func NewHub(debounce time.Duration) *Hub {
+	if debounce <= 0 {
+		debounce = 100 * time.Millisecond
+	}
+	return &Hub{debounce: debounce, roots: map[string]*rootWatch{}}
+}
+
+// rootWatch is the shared watcher + subscriber set for one root.
+type rootWatch struct {
+	watcher *fsnotify.Watcher
+	subs    map[int]chan Event
+}
+
+// Subscribe registers a subscriber for root, lazily starting its watcher. The returned
+// channel receives coalesced Events; cancel removes the subscriber and tears down the
+// watcher once the last subscriber for the root is gone. cancel is idempotent.
+func (h *Hub) Subscribe(root string) (<-chan Event, func(), error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	rw := h.roots[root]
+	if rw == nil {
+		var err error
+		rw, err = h.startWatcher(root)
+		if err != nil {
+			return nil, nil, err
+		}
+		h.roots[root] = rw
+	}
+
+	id := h.nextID
+	h.nextID++
+	ch := make(chan Event, 8)
+	rw.subs[id] = ch
+
+	var once sync.Once
+	cancel := func() {
+		once.Do(func() { h.unsubscribe(root, id) })
+	}
+	return ch, cancel, nil
+}
+
+// startWatcher creates the fsnotify watcher for root, adds the .cairn dirs, and launches
+// the read+coalesce+broadcast goroutine. Caller holds h.mu.
+func (h *Hub) startWatcher(root string) (*rootWatch, error) {
+	w, err := fsnotify.NewWatcher()
+	if err != nil {
+		return nil, err
+	}
+	cairn := filepath.Join(root, ".cairn")
+	// Watch the dirs, not the files: atomic temp+rename swaps inodes (store.atomicWrite).
+	// A missing dir is not fatal — the workspace may not be initialized yet.
+	_ = w.Add(cairn)
+	_ = w.Add(filepath.Join(cairn, "tasks"))
+
+	rw := &rootWatch{watcher: w, subs: map[int]chan Event{}}
+
+	raw := make(chan string, 64)
+	go func() {
+		for ev := range w.Events {
+			// Renamed-into-place files arrive as Create; treat Create/Write/Remove alike.
+			raw <- ev.Name
+		}
+		close(raw)
+	}()
+	go coalesce(raw, h.debounce, func(e Event) { h.broadcast(root, e) })
+
+	return rw, nil
+}
+
+// unsubscribe removes a subscriber and, if it was the last for the root, stops the watcher.
+func (h *Hub) unsubscribe(root string, id int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	rw := h.roots[root]
+	if rw == nil {
+		return
+	}
+	if ch, ok := rw.subs[id]; ok {
+		delete(rw.subs, id)
+		close(ch)
+	}
+	if len(rw.subs) == 0 {
+		rw.watcher.Close() // ends the read goroutine, which closes raw, which ends coalesce
+		delete(h.roots, root)
+	}
+}
+
+// broadcast delivers e to every subscriber of root, dropping for any slow subscriber whose
+// buffer is full rather than stalling the watcher.
+func (h *Hub) broadcast(root string, e Event) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	rw := h.roots[root]
+	if rw == nil {
+		return
+	}
+	for _, ch := range rw.subs {
+		select {
+		case ch <- e:
+		default:
+		}
+	}
+}
+
+// activeRoots reports how many roots currently have a live watcher (introspection for
+// tests and diagnostics).
+func (h *Hub) activeRoots() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.roots)
+}

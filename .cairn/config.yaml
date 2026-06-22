@@ -1,0 +1,13 @@
+prefix: PROJ
+counter: 28
+states:
+    - backlog
+    - in_progress
+    - in_review
+    - done
+    - canceled
+closed:
+    - done
+    - canceled
+initial: backlog
+check_timeout_default: 120

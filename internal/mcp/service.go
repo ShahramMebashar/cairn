@@ -1,0 +1,364 @@
+package mcp
+
+import (
+	"errors"
+	"fmt"
+	"sort"
+	"time"
+
+	"cairn/internal/check"
+	"cairn/internal/config"
+	"cairn/internal/store"
+	"cairn/internal/task"
+)
+
+// ErrAlreadyClaimed is returned when a task is claimed by a different actor (SPEC §7).
+var ErrAlreadyClaimed = errors.New("task already claimed by another actor")
+
+// ErrNotManual is returned when attesting a check that has a command — those are executed
+// by the engine (RunChecks), never attested.
+var ErrNotManual = errors.New("cannot attest a command check; it is run by the engine")
+
+// Service implements the 7 verbs (SPEC §7) as thin orchestration over store + task +
+// check. Gate logic is never reimplemented here — it calls task.Ready / task.CanTransition.
+// Identity (actor) is fixed at construction, not passed per call; every write stamps a
+// provenance entry with it.
+type Service struct {
+	store *store.Store
+	actor string
+	now   func() time.Time
+}
+
+// NewService binds the verbs to a store and an actor identity. now is injectable for
+// deterministic provenance timestamps; nil uses the wall clock.
+func NewService(s *store.Store, actor string, now func() time.Time) *Service {
+	if now == nil {
+		now = time.Now
+	}
+	return &Service{store: s, actor: actor, now: now}
+}
+
+func rulesOf(c config.Config) task.Rules {
+	return task.Rules{Initial: c.Initial, Closed: c.Closed, States: c.States}
+}
+
+// TaskView is a task plus derived fields: readiness (SPEC §4: computed, not stored) and the
+// last-activity timestamp (newest provenance entry) for "updated X ago" displays.
+type TaskView struct {
+	task.Task
+	Ready     bool   `json:"ready"`
+	UpdatedAt string `json:"updatedAt,omitempty"`
+}
+
+// List returns tasks, optionally filtered by status, assignee, and readiness. A nil
+// ready pointer means "don't filter on readiness". list(ready=true, status=initial) is
+// the agent's "what can I start now" query (SPEC §7).
+func (svc *Service) List(status, assignee string, ready *bool) ([]TaskView, error) {
+	docs, err := svc.store.ListDocs()
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := svc.store.Config()
+	if err != nil {
+		return nil, err
+	}
+	rules := rulesOf(cfg)
+
+	all := make(map[string]task.Task, len(docs))
+	for _, d := range docs {
+		all[d.Task.ID] = d.Task
+	}
+
+	var out []TaskView
+	for _, d := range docs {
+		t := d.Task
+		if status != "" && t.Status != status {
+			continue
+		}
+		if assignee != "" && t.Assignee != assignee {
+			continue
+		}
+		r := task.Ready(t, all, rules)
+		if ready != nil && *ready != r {
+			continue
+		}
+		out = append(out, TaskView{Task: t, Ready: r, UpdatedAt: lastActivity(d)})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
+// lastActivity returns the timestamp of the newest provenance entry, or "" if none.
+func lastActivity(d *store.Doc) string {
+	if n := len(d.Provenance); n > 0 {
+		return d.Provenance[n-1].At
+	}
+	return ""
+}
+
+// Get returns the full task: typed fields, checks (+results), provenance, and body.
+func (svc *Service) Get(id string) (*store.Doc, error) {
+	return svc.store.Get(id)
+}
+
+// Create mints a new task in the initial state. Deps must already exist, or the graph
+// would be born dangling (SPEC §4).
+func (svc *Service) Create(d store.Draft) (*store.Doc, error) {
+	if !task.ValidPriority(d.Priority) {
+		return nil, fmt.Errorf("%w: %q", task.ErrInvalidPriority, d.Priority)
+	}
+	if len(d.Deps) > 0 || d.Parent != "" {
+		all, err := svc.store.List()
+		if err != nil {
+			return nil, err
+		}
+		for _, dep := range d.Deps {
+			if _, ok := all[dep]; !ok {
+				return nil, fmt.Errorf("%w: %s", task.ErrDanglingDep, dep)
+			}
+		}
+		if d.Parent != "" {
+			if _, ok := all[d.Parent]; !ok {
+				return nil, fmt.Errorf("%w: %s", task.ErrParentMissing, d.Parent)
+			}
+		}
+	}
+	return svc.store.Create(d, svc.actor, svc.now())
+}
+
+// UpdateFields are the optional organization fields editable after create. A nil pointer
+// leaves a field unchanged; a non-nil pointer sets it (empty clears).
+type UpdateFields struct {
+	Priority *string
+	Labels   *[]string
+	Parent   *string
+}
+
+// Update sets priority/labels/parent on a task (SPEC §7-style write; appends provenance).
+// Parent changes are validated to exist and not create a cycle.
+func (svc *Service) Update(id string, f UpdateFields) (*store.Doc, error) {
+	doc, err := svc.store.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	if f.Priority == nil && f.Labels == nil && f.Parent == nil {
+		return doc, nil // nothing to change — don't write a spurious provenance entry
+	}
+	if f.Priority != nil && !task.ValidPriority(*f.Priority) {
+		return nil, fmt.Errorf("%w: %q", task.ErrInvalidPriority, *f.Priority)
+	}
+	if f.Parent != nil && *f.Parent != "" {
+		all, err := svc.store.List()
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := all[*f.Parent]; !ok {
+			return nil, fmt.Errorf("%w: %s", task.ErrParentMissing, *f.Parent)
+		}
+		t := all[id]
+		t.Parent = *f.Parent
+		all[id] = t
+		if err := task.ValidateParents(all); err != nil {
+			return nil, err
+		}
+	}
+	if f.Priority != nil {
+		doc.SetPriority(*f.Priority)
+	}
+	if f.Labels != nil {
+		doc.SetLabels(*f.Labels)
+	}
+	if f.Parent != nil {
+		doc.SetParent(*f.Parent)
+	}
+	doc.AppendProvenance(svc.actor, "updated", "", svc.now())
+	if err := svc.store.Save(doc); err != nil {
+		return nil, err
+	}
+	return doc, nil
+}
+
+// Reorder sets a task's board ordering rank. Reordering is cosmetic, so it deliberately
+// does NOT append a provenance entry (keeps the activity log meaningful).
+func (svc *Service) Reorder(id string, rank float64) (*store.Doc, error) {
+	doc, err := svc.store.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	doc.SetRank(rank)
+	if err := svc.store.Save(doc); err != nil {
+		return nil, err
+	}
+	return doc, nil
+}
+
+// Claim sets the assignee to this actor. Re-claiming one's own task is a no-op; claiming
+// a task held by someone else fails (SPEC §7).
+func (svc *Service) Claim(id string) (*store.Doc, error) {
+	doc, err := svc.store.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	if doc.Task.Assignee == svc.actor {
+		return doc, nil
+	}
+	if doc.Task.Assignee != "" {
+		return nil, fmt.Errorf("%w: held by %s", ErrAlreadyClaimed, doc.Task.Assignee)
+	}
+	doc.SetAssignee(svc.actor)
+	doc.AppendProvenance(svc.actor, "claimed", "", svc.now())
+	if err := svc.store.Save(doc); err != nil {
+		return nil, err
+	}
+	return doc, nil
+}
+
+// Transition applies the two gates (SPEC §5). When closing is blocked solely because
+// checks have not passed, it auto-runs the checks and retries — refusing only if they
+// still don't pass. Deps-gate and unknown-state failures are returned without side effects.
+func (svc *Service) Transition(id, to string) (*store.Doc, error) {
+	doc, err := svc.store.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	all, err := svc.store.List()
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := svc.store.Config()
+	if err != nil {
+		return nil, err
+	}
+	rules := rulesOf(cfg)
+
+	gateErr := task.CanTransition(doc.Task, to, all, rules)
+	if gateErr == nil {
+		return svc.commitTransition(doc, to)
+	}
+	if !errors.Is(gateErr, task.ErrChecksNotPassed) {
+		return nil, gateErr // deps gate or unknown state: no auto-run
+	}
+
+	// Checks gate: auto-run the cmd checks, persist results, then re-evaluate.
+	if err := svc.runCmdChecks(doc, cfg, nil); err != nil {
+		return nil, err
+	}
+	doc.AppendProvenance(svc.actor, "ran checks", "", svc.now())
+
+	if again := task.CanTransition(doc.Task, to, all, rules); again != nil {
+		if saveErr := svc.store.Save(doc); saveErr != nil { // persist the recorded results
+			return nil, saveErr
+		}
+		return doc, again
+	}
+	doc.SetStatus(to)
+	doc.AppendProvenance(svc.actor, "transitioned to "+to, "", svc.now())
+	if err := svc.store.Save(doc); err != nil {
+		return nil, err
+	}
+	return doc, nil
+}
+
+func (svc *Service) commitTransition(doc *store.Doc, to string) (*store.Doc, error) {
+	doc.SetStatus(to)
+	doc.AppendProvenance(svc.actor, "transitioned to "+to, "", svc.now())
+	if err := svc.store.Save(doc); err != nil {
+		return nil, err
+	}
+	return doc, nil
+}
+
+// RunChecks runs the cmd checks (all by default, or the indices in `only`) and writes
+// their results. Manual checks have no cmd and are skipped (SPEC §6, §7).
+func (svc *Service) RunChecks(id string, only []int) (*store.Doc, error) {
+	doc, err := svc.store.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := svc.store.Config()
+	if err != nil {
+		return nil, err
+	}
+	var filter map[int]bool
+	if len(only) > 0 {
+		filter = make(map[int]bool, len(only))
+		for _, i := range only {
+			filter[i] = true
+		}
+	}
+	if err := svc.runCmdChecks(doc, cfg, filter); err != nil {
+		return nil, err
+	}
+	doc.AppendProvenance(svc.actor, "ran checks", "", svc.now())
+	if err := svc.store.Save(doc); err != nil {
+		return nil, err
+	}
+	return doc, nil
+}
+
+// runCmdChecks executes each cmd check (optionally filtered) and records pass/fail on the
+// doc. It mutates but does not save.
+func (svc *Service) runCmdChecks(doc *store.Doc, cfg config.Config, only map[int]bool) error {
+	runner := check.Runner{Root: svc.store.Root(), LogDir: svc.store.RunsDir(), Now: svc.now}
+	for i, c := range doc.Task.Checks {
+		if only != nil && !only[i] {
+			continue
+		}
+		if c.Cmd == "" {
+			continue // manual check: result set by attestation, not execution
+		}
+		res, err := runner.Run(doc.Task.ID, check.Spec{Cmd: c.Cmd, Cwd: c.Cwd, Timeout: cfg.CheckTimeout(c.Timeout)})
+		if err != nil {
+			return err
+		}
+		result := "fail"
+		if res.Pass {
+			result = "pass"
+		}
+		if err := doc.SetCheckResult(i, result); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Note appends a free-text provenance entry (SPEC §7).
+// Attest sets a manual check's result (SPEC §6: a check with no command is set by
+// attestation, not execution). It refuses checks that have a command and out-of-range
+// indices. pass=false records a failed attestation.
+func (svc *Service) Attest(id string, index int, pass bool) (*store.Doc, error) {
+	doc, err := svc.store.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	if index < 0 || index >= len(doc.Task.Checks) {
+		return nil, fmt.Errorf("attest: check index %d out of range", index)
+	}
+	if doc.Task.Checks[index].Cmd != "" {
+		return nil, ErrNotManual
+	}
+	result := "fail"
+	if pass {
+		result = "pass"
+	}
+	if err := doc.SetCheckResult(index, result); err != nil {
+		return nil, err
+	}
+	doc.AppendProvenance(svc.actor, "attested", fmt.Sprintf("check %d %s", index, result), svc.now())
+	if err := svc.store.Save(doc); err != nil {
+		return nil, err
+	}
+	return doc, nil
+}
+
+func (svc *Service) Note(id, text string) (*store.Doc, error) {
+	doc, err := svc.store.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	doc.AppendProvenance(svc.actor, "note", text, svc.now())
+	if err := svc.store.Save(doc); err != nil {
+		return nil, err
+	}
+	return doc, nil
+}
