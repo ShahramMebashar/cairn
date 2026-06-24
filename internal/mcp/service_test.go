@@ -13,7 +13,7 @@ import (
 )
 
 // taskIDRe matches the time-ordered ids minted by store.mintTaskID (prefix + 16 base32 chars).
-var taskIDRe = regexp.MustCompile(`^PROJ-[0-9a-z]{16}$`)
+var taskIDRe = regexp.MustCompile(`^PROJ-[0-9a-z]{10}$`)
 
 func service(t *testing.T, actor string) *Service {
 	t.Helper()

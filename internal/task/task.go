@@ -92,17 +92,32 @@ func ValidPriority(p string) bool { return p == "" || slices.Contains(Priorities
 // Closed reports whether t is currently in a closed state.
 func Closed(t Task, r Rules) bool { return r.IsClosed(t.Status) }
 
-// Ready reports whether every dep of t resolves to a closed task. Readiness is derived,
-// never stored (SPEC §4). A dep missing from all yields false defensively; the real
-// dangling-dep error is raised once, at load, by ValidateDeps.
-func Ready(t Task, all map[string]Task, r Rules) bool {
+// DepResolver looks up a single task by id. ok is false when no such task exists. It lets
+// the deps gate fetch only a task's listed dependencies instead of loading the whole board.
+type DepResolver func(id string) (Task, bool)
+
+// ReadyFunc reports whether every dep of t resolves to a closed task, fetching each dep on
+// demand via resolve. Readiness is derived, never stored (SPEC §4). A dep that does not
+// resolve yields false defensively; the real dangling-dep error is raised once, at load, by
+// ValidateDeps.
+func ReadyFunc(t Task, resolve DepResolver, r Rules) bool {
 	for _, id := range t.Deps {
-		dep, ok := all[id]
+		dep, ok := resolve(id)
 		if !ok || !r.IsClosed(dep.Status) {
 			return false
 		}
 	}
 	return true
+}
+
+// Ready is ReadyFunc backed by a fully-loaded task map.
+func Ready(t Task, all map[string]Task, r Rules) bool {
+	return ReadyFunc(t, mapResolver(all), r)
+}
+
+// mapResolver adapts a loaded task map to a DepResolver.
+func mapResolver(all map[string]Task) DepResolver {
+	return func(id string) (Task, bool) { t, ok := all[id]; return t, ok }
 }
 
 // CanTransition returns nil if moving t to state `to` is allowed, otherwise a wrapped
@@ -120,12 +135,18 @@ func Ready(t Task, all map[string]Task, r Rules) bool {
 // All other transitions are free, including reopening a closed task. Both gates can
 // apply at once (e.g. backlog -> done directly); the deps gate is reported first.
 func CanTransition(t Task, to string, all map[string]Task, r Rules) error {
+	return CanTransitionFunc(t, to, mapResolver(all), r)
+}
+
+// CanTransitionFunc is CanTransition with the deps gate resolving dependencies on demand via
+// resolve, so a caller need not load the whole board to move one task.
+func CanTransitionFunc(t Task, to string, resolve DepResolver, r Rules) error {
 	if !r.IsState(to) {
 		return fmt.Errorf("%w: %q", ErrUnknownState, to)
 	}
 
 	// Deps gate: triggered only when actually leaving the initial state.
-	if t.Status == r.Initial && to != r.Initial && !Ready(t, all, r) {
+	if t.Status == r.Initial && to != r.Initial && !ReadyFunc(t, resolve, r) {
 		return fmt.Errorf("%w: %s cannot leave %q with unclosed deps", ErrDepsNotClosed, t.ID, r.Initial)
 	}
 

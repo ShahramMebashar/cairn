@@ -1,0 +1,20 @@
+id: ses_c29b59a03f9186ebd6ed051a
+task: PROJ-01kvxhjn93thjmqf
+attempt: att_c29b59a03f9186ebd6ed051a
+actor: agent:claude
+client: claude
+model: claude-opus-4-8
+status: finished
+idempotency_key: begin-board-loading-001
+started_at: 2026-06-24T19:26:48.126092Z
+branch: main
+ended_at: 2026-06-24T19:28:10Z
+summary: |-
+  Kanban cards now show a loading overlay while a dragged card's transition is in flight, mirroring the task-detail control. Single file: web/src/pages/BoardView.tsx.
+
+  - Derived the in-flight card from the shared useTransition (pendingId = isPending && variables.id; dnd-kit = one drag at a time) and a pendingLabel ("Running checks…" for gated closed/review targets via status.closed/status.review, else "Updating…").
+  - Threaded busy/busyLabel through Column → SortableCard → Card.
+  - Card got a relative root + absolutely-positioned overlay (translucent panel, backdrop blur, Loader2 spinner + label, z-10) and aria-busy. DragOverlay card unaffected (busy defaults off).
+  - No change to drop behavior: the immediate drop already holds via local cols state until the mutation settles; on check failure the card snaps back and the existing error toast fires.
+
+  Verified: pnpm build clean (check passed). Review focus: visual polish of the overlay; confirm in_review labels correctly after the dev server restarts with the rebuilt bin/cairn (serves status.review) — until then done shows "Running checks…", in_review shows "Updating…".

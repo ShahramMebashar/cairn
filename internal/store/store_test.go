@@ -174,7 +174,7 @@ func TestSetCheckResult(t *testing.T) {
 
 func TestCreateMintsTimeOrderedID(t *testing.T) {
 	s := New(repo(t, map[string]string{"PROJ-001": minimalTask}))
-	idRe := regexp.MustCompile(`^PROJ-[0-9a-z]{16}$`)
+	idRe := regexp.MustCompile(`^PROJ-[0-9a-z]{10}$`)
 	earlier := time.Date(2026, 6, 21, 12, 0, 0, 0, time.UTC)
 	later := earlier.Add(time.Second)
 

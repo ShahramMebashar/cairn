@@ -215,7 +215,12 @@ export function TaskDetail({
                 <SelectTrigger className="h-8 w-full">
                   {transition.isPending ? (
                     <span className="flex items-center gap-2 text-sm">
-                      <Loader2 className="size-3 animate-spin" /> Updating…
+                      <Loader2 className="size-3 animate-spin" />
+                      {transition.variables &&
+                      ((status.closed ?? []).includes(transition.variables.to) ||
+                        status.review === transition.variables.to)
+                        ? "Running checks…"
+                        : "Updating…"}
                     </span>
                   ) : (
                     <SelectValue />

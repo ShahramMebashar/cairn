@@ -18,6 +18,15 @@ const taskKey = (path: string, id: string) => ["task", path, id] as const;
 const runsKey = (path: string, id: string) => ["runs", path, id] as const;
 const sessionsKey = (path: string, id?: string) => ["sessions", path, ...(id ? [id] : [])] as const;
 
+// isGatedStatus reports whether entering `to` runs the task's command checks server-side
+// (i.e. the move blocks while checks run). Mirrors the backend gate: closed states or the
+// review state. Reads the cached workspace status so callers needn't thread it through.
+export function isGatedStatus(qc: QueryClient, path: string, to: string): boolean {
+  const st = qc.getQueryData<api.Status>(["status", path]);
+  if (!st) return false;
+  return (st.closed ?? []).includes(to) || st.review === to;
+}
+
 export function useStatus(path: string | null) {
   return useQuery({
     queryKey: ["status", path],
@@ -136,11 +145,29 @@ export function useTransition(path: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, to }: { id: string; to: string }) => api.transitionTask(path, id, to),
-    onSuccess: (t) => {
-      refresh(qc, path, t.id);
-      toast.success(`${t.id} → ${t.status}`);
+    // Reflect the new status immediately for free (non-gated) moves so the board and open
+    // detail update with no lag. Gated moves (review/closed) run command checks server-side and
+    // may be refused, so we DON'T fake them — the UI shows a "running checks…" state until the
+    // server confirms. onError rolls back, onSettled reconciles with the real document.
+    onMutate: async ({ id, to }) => {
+      if (isGatedStatus(qc, path, to)) return { id };
+      await qc.cancelQueries({ queryKey: tasksKey(path) });
+      await qc.cancelQueries({ queryKey: taskKey(path, id) });
+      const prevList = qc.getQueryData<api.Task[]>(tasksKey(path));
+      const prevTask = qc.getQueryData<api.Task>(taskKey(path, id));
+      qc.setQueryData<api.Task[]>(tasksKey(path), (old) =>
+        old?.map((t) => (t.id === id ? { ...t, status: to } : t)),
+      );
+      qc.setQueryData<api.Task>(taskKey(path, id), (old) => (old ? { ...old, status: to } : old));
+      return { prevList, prevTask, id };
     },
-    onError: fail,
+    onError: (err, _vars, ctx) => {
+      if (ctx?.prevList !== undefined) qc.setQueryData(tasksKey(path), ctx.prevList);
+      if (ctx?.prevTask !== undefined) qc.setQueryData(taskKey(path, ctx.id), ctx.prevTask);
+      fail(err);
+    },
+    onSuccess: (t) => toast.success(`${t.id} → ${t.status}`),
+    onSettled: (_d, _e, vars) => refresh(qc, path, vars.id),
   });
 }
 

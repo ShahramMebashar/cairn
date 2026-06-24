@@ -16,7 +16,7 @@ import (
 )
 
 // webIDRe matches the time-ordered ids minted by the store (prefix + 16 base32 chars).
-var webIDRe = regexp.MustCompile(`^WEB-[0-9a-z]{16}$`)
+var webIDRe = regexp.MustCompile(`^WEB-[0-9a-z]{10}$`)
 
 type runResp struct {
 	Runs []struct {

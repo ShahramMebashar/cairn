@@ -11,25 +11,30 @@ import (
 // numeric order — that is what makes time-ordered ids sort chronologically as plain strings.
 const crockford = "0123456789abcdefghjkmnpqrstvwxyz"
 
-// idTimeChars is the width of the encoded millisecond timestamp (10 chars × 5 bits = 50 bits,
-// comfortably covering the 48-bit UnixMilli range for the next ~8900 years). idRandChars is
-// the random tie-break tail that distinguishes ids minted within the same millisecond.
+// idTimeChars is the width of the encoded timestamp: 6 chars × 5 bits = 30 bits of SECONDS
+// since idEpoch, covering ~34 years (to ~2058). idRandChars is the random tie-break tail
+// (4 chars × 5 bits = 20 bits) that distinguishes ids minted within the same second.
 const (
-	idTimeChars = 10
-	idRandChars = 6
+	idTimeChars = 6
+	idRandChars = 4
 )
 
+// idEpoch is 2024-01-01T00:00:00Z in Unix seconds. Counting from here instead of 1970 keeps
+// the time prefix to 6 chars; ids minted before it clamp to 0 (they only sort first).
+const idEpoch = 1704067200
+
 // mintTaskID returns a time-ordered, collision-resistant task id of the form
-// "<prefix>-<time><rand>" in lowercase Crockford base32, e.g. "PROJ-01j8x2k7q7f3az".
+// "<prefix>-<time><rand>" in lowercase Crockford base32, e.g. "PROJ-k3m9x7q2vw".
 //
-// The time prefix encodes at.UnixMilli() big-endian, so ids sort lexically by creation time;
-// the crypto/rand tail breaks ties within the same millisecond. Crucially, minting reads and
-// writes no shared counter, so two people creating tasks in separate clones never collide on
-// the id or on the on-disk filename — the conflict that a monotonic counter made unavoidable.
+// The time prefix encodes seconds-since-idEpoch big-endian, so ids sort lexically by creation
+// time (to the second); the crypto/rand tail breaks ties within the same second. Crucially,
+// minting reads and writes no shared counter, so two people creating tasks in separate clones
+// never collide on the id or on the on-disk filename — the conflict that a monotonic counter
+// made unavoidable.
 func mintTaskID(prefix string, at time.Time) (string, error) {
 	v := uint64(0)
-	if ms := at.UnixMilli(); ms > 0 {
-		v = uint64(ms)
+	if s := at.Unix() - idEpoch; s > 0 {
+		v = uint64(s)
 	}
 	out := make([]byte, idTimeChars+idRandChars)
 	for i := idTimeChars - 1; i >= 0; i-- {

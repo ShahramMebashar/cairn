@@ -334,15 +334,13 @@ func (svc *Service) view(doc *store.Doc) taskOut {
 // ReadyOf computes a task's derived readiness best-effort; on a load error it reports
 // false rather than failing the response. Used by the web adapter for single-task DTOs.
 func (svc *Service) ReadyOf(t task.Task) bool {
-	all, err := svc.store.List()
-	if err != nil {
-		return false
-	}
 	cfg, err := svc.store.Config()
 	if err != nil {
 		return false
 	}
-	return task.Ready(t, all, rulesOf(cfg))
+	// Resolve only this task's listed deps instead of scanning the whole board — this runs on
+	// the response path of every single-task endpoint (get/note/update/transition).
+	return task.ReadyFunc(t, svc.depResolver(), rulesOf(cfg))
 }
 
 func toCheckOut(checks []task.Check) []checkOut {

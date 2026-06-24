@@ -1,0 +1,22 @@
+id: ses_360973f54bf19b1ff27931b4
+task: PROJ-01kvxgfk5q23yahc
+attempt: att_360973f54bf19b1ff27931b4
+actor: agent:claude
+client: claude
+model: claude-opus-4-8
+status: finished
+idempotency_key: begin-board-readall-fix-001
+started_at: 2026-06-24T19:07:38.870151Z
+branch: main
+ended_at: 2026-06-24T19:10:40Z
+summary: |-
+  Status updates no longer re-read the whole board. Root cause: single-task paths called store.List() (full disk scan + whole-graph re-validation) when a status move only needs the task, its listed deps, and config — notes were fast because they skip that.
+
+  Changes:
+  - task.go: added DepResolver, ReadyFunc, CanTransitionFunc; Ready/CanTransition now wrap them.
+  - service.go: Service.depResolver() (one store.Get per dep); Transition dropped store.List().
+  - tools.go: ReadyOf resolves only the task's deps — also speeds note/update/get since it's on every single-task response.
+  - queries.ts: useTransition is now optimistic (instant UI, rollback on error).
+  - events.go: buildEvent keeps task-changed when one task + a coincident session write land in the same window (fixes the original "task page not realtime" report).
+
+  Trade-off: removed per-transition whole-graph integrity validation; still enforced on list/read paths. Gated review/closed transitions still run command checks synchronously (intentional; not addressed). Verified: go test ./... and go vet clean, pnpm build clean, added TestReadyFuncResolvesOnlyListedDeps. Review focus: confirm dropping graph validation from the transition path is acceptable.

@@ -163,18 +163,31 @@ func coalesce(in <-chan string, d time.Duration, emit func(Event)) {
 }
 
 func buildEvent(taskIDs, sessionIDs map[string]struct{}, listLevel bool) Event {
-	if !listLevel && len(taskIDs) == 0 && len(sessionIDs) == 1 {
-		for id := range sessionIDs {
-			return Event{Type: evtSessionChanged, Session: id}
-		}
-	}
-	if listLevel || len(taskIDs) != 1 || len(sessionIDs) != 0 {
+	// A config/board-level change, or more than one task touched in the window, can't be
+	// expressed as a single task-changed signal — fall back to the list-wide refresh.
+	if listLevel || len(taskIDs) > 1 {
 		return Event{Type: evtTasksChanged}
 	}
-	for id := range taskIDs {
-		return Event{Type: evtTaskChanged, ID: id}
+	// Exactly one task touched — possibly alongside its own session/live writes in the same
+	// window. Target that task so the open detail, runs, and sessions all refresh live; the
+	// client's task-changed branch invalidates this id's session queries too, so a coincident
+	// session write is covered. (Previously a session in the window downgraded this to a
+	// list-only refresh, leaving the open task detail stale.)
+	if len(taskIDs) == 1 {
+		for id := range taskIDs {
+			return Event{Type: evtTaskChanged, ID: id}
+		}
 	}
-	return Event{Type: evtTasksChanged} // unreachable: len(ids)==1 above
+	// No task touched: only session/live writes. Signal a session-level refresh. The id is
+	// advisory — the client refreshes all sessions for the path regardless of how many changed.
+	if len(sessionIDs) >= 1 {
+		var id string
+		for s := range sessionIDs {
+			id = s
+		}
+		return Event{Type: evtSessionChanged, Session: id}
+	}
+	return Event{Type: evtTasksChanged} // unreachable: coalesce only emits when something was classified
 }
 
 // Hub fans filesystem changes out to SSE subscribers. It keeps one fsnotify watcher per

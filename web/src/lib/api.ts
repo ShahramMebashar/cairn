@@ -89,6 +89,7 @@ export type Status = {
   states?: string[];
   closed?: string[];
   initial?: string;
+  review?: string; // state whose entry runs command checks (alongside closed states)
   actor?: string;
   suggestedActor?: string;
 };

@@ -50,6 +50,19 @@ func rulesOf(c config.Config) task.Rules {
 	return task.Rules{Initial: c.Initial, Closed: c.Closed, States: c.States, Review: c.Review()}
 }
 
+// depResolver fetches a single task by id for the deps gate, reading just that file instead
+// of scanning the whole board. A missing/unreadable dep resolves to not-found, which the gate
+// treats as "not closed" — matching the loaded-map behaviour without the full List() cost.
+func (svc *Service) depResolver() task.DepResolver {
+	return func(id string) (task.Task, bool) {
+		d, err := svc.store.Get(id)
+		if err != nil {
+			return task.Task{}, false
+		}
+		return d.Task, true
+	}
+}
+
 // TaskView is a task plus derived fields: readiness (SPEC §4: computed, not stored) and the
 // last-activity timestamp (newest provenance entry) for "updated X ago" displays.
 type TaskView struct {
@@ -276,18 +289,17 @@ func (svc *Service) Transition(id, to string) (*store.Doc, error) {
 	if err != nil {
 		return nil, err
 	}
-	all, err := svc.store.List()
-	if err != nil {
-		return nil, err
-	}
 	cfg, err := svc.store.Config()
 	if err != nil {
 		return nil, err
 	}
 	rules := rulesOf(cfg)
+	// The deps gate needs only this task's listed deps, so resolve them on demand rather than
+	// scanning and re-validating the entire board on every status change.
+	deps := svc.depResolver()
 
 	// Report deps/unknown-state failures before touching checks (deps are reported first).
-	gateErr := task.CanTransition(doc.Task, to, all, rules)
+	gateErr := task.CanTransitionFunc(doc.Task, to, deps, rules)
 	if gateErr != nil && !errors.Is(gateErr, task.ErrChecksNotPassed) {
 		return nil, gateErr
 	}
@@ -305,7 +317,7 @@ func (svc *Service) Transition(id, to string) (*store.Doc, error) {
 	}
 	doc.AppendProvenance(svc.actor, "ran checks", "", svc.now())
 
-	if again := task.CanTransition(doc.Task, to, all, rules); again != nil {
+	if again := task.CanTransitionFunc(doc.Task, to, deps, rules); again != nil {
 		if saveErr := svc.store.Save(doc); saveErr != nil { // persist the recorded results
 			return nil, saveErr
 		}

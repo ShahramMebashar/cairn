@@ -22,7 +22,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CheckCircle2, GitBranch, Plus, Search, SquareKanban } from "lucide-react";
+import { CheckCircle2, GitBranch, Loader2, Plus, Search, SquareKanban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SelectItem } from "@/components/ui/select";
@@ -50,6 +50,17 @@ export function BoardView({
   const { data: tasks } = useTasks(path);
   const transition = useTransition(path);
   const reorder = useReorder(path);
+
+  // The card whose transition is in flight, so it can show a loading overlay. dnd-kit allows
+  // one drag at a time, so the single shared mutation identifies exactly one busy card. Gated
+  // moves (closed/review) run checks server-side for seconds — label them so the wait reads as
+  // verification, matching the task-detail control.
+  const pendingId = transition.isPending ? transition.variables?.id : undefined;
+  const pendingTo = transition.variables?.to;
+  const pendingLabel =
+    pendingTo && ((status.closed ?? []).includes(pendingTo) || status.review === pendingTo)
+      ? "Running checks…"
+      : "Updating…";
 
   const [query, setQuery] = useState("");
   const [priority, setPriority] = useState("");
@@ -240,6 +251,8 @@ export function BoardView({
                 cardIds={cols[s] ?? []}
                 byId={byId}
                 onOpenTask={onOpenTask}
+                pendingId={pendingId}
+                pendingLabel={pendingLabel}
               />
             ))}
           </div>
@@ -258,12 +271,16 @@ function Column({
   cardIds,
   byId,
   onOpenTask,
+  pendingId,
+  pendingLabel,
 }: {
   status: string;
   info: Status;
   cardIds: string[];
   byId: Map<string, Task>;
   onOpenTask: (id: string) => void;
+  pendingId?: string;
+  pendingLabel: string;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   return (
@@ -283,7 +300,15 @@ function Column({
         >
           {cardIds.map((id) => {
             const t = byId.get(id);
-            return t ? <SortableCard key={id} task={t} onOpenTask={onOpenTask} /> : null;
+            return t ? (
+              <SortableCard
+                key={id}
+                task={t}
+                onOpenTask={onOpenTask}
+                busy={id === pendingId}
+                busyLabel={pendingLabel}
+              />
+            ) : null;
           })}
         </div>
       </SortableContext>
@@ -294,9 +319,13 @@ function Column({
 function SortableCard({
   task,
   onOpenTask,
+  busy,
+  busyLabel,
 }: {
   task: Task;
   onOpenTask: (id: string) => void;
+  busy?: boolean;
+  busyLabel?: string;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
@@ -311,7 +340,7 @@ function SortableCard({
       role="button"
       tabIndex={0}
     >
-      {isDragging ? <DropIndicator /> : <Card task={task} />}
+      {isDragging ? <DropIndicator /> : <Card task={task} busy={busy} busyLabel={busyLabel} />}
     </div>
   );
 }
@@ -325,17 +354,33 @@ function DropIndicator() {
   );
 }
 
-function Card({ task, dragging }: { task: Task; dragging?: boolean }) {
+function Card({
+  task,
+  dragging,
+  busy,
+  busyLabel,
+}: {
+  task: Task;
+  dragging?: boolean;
+  busy?: boolean;
+  busyLabel?: string;
+}) {
   const checks = task.checks ?? [];
   const passed = checks.filter((c) => c.result === "pass").length;
   const allPass = checks.length > 0 && passed === checks.length;
   return (
     <div
+      aria-busy={busy}
       className={cn(
-        "cursor-pointer rounded-lg border bg-panel p-2.5 text-left shadow-xs transition-shadow hover:border-foreground/20",
+        "relative cursor-pointer rounded-lg border bg-panel p-2.5 text-left shadow-xs transition-shadow hover:border-foreground/20",
         dragging && "rotate-2 shadow-md",
       )}
     >
+      {busy && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 rounded-lg bg-panel/70 text-xs text-muted-foreground backdrop-blur-[1px]">
+          <Loader2 className="size-3 animate-spin" /> {busyLabel}
+        </div>
+      )}
       <div className="mb-1 flex items-center gap-1.5">
         <PriorityIcon priority={task.priority} />
         <span className="font-mono text-[11px] text-muted-foreground">{task.id}</span>

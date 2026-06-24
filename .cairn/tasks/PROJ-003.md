@@ -22,6 +22,43 @@ provenance:
   - {who: 'human:web', at: '2026-06-22T13:38:33Z', did: transitioned to in_review}
   - {who: 'human:web', at: '2026-06-22T13:40:07Z', did: transitioned to in_progress}
   - {who: 'human:web', at: '2026-06-22T13:40:09Z', did: transitioned to done}
+  - {who: 'human:shaho', at: '2026-06-24T18:45:43Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-24T18:45:43Z', did: transitioned to in_review}
+  - {who: 'human:shaho', at: '2026-06-24T18:46:16Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-24T18:46:16Z', did: transitioned to done}
+  - {who: 'human:shaho', at: '2026-06-24T18:49:58Z', did: note, text: test}
+  - {who: 'human:shaho', at: '2026-06-24T18:50:04Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-24T18:50:04Z', did: transitioned to in_review}
+  - {who: 'human:shaho', at: '2026-06-24T18:50:07Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-24T18:50:07Z', did: transitioned to done}
+  - {who: 'human:shaho', at: '2026-06-24T18:50:19Z', did: updated}
+  - {who: 'human:shaho', at: '2026-06-24T18:50:22Z', did: updated}
+  - {who: 'human:shaho', at: '2026-06-24T19:09:22Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-24T19:09:22Z', did: transitioned to in_review}
+  - {who: 'human:shaho', at: '2026-06-24T19:09:25Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-24T19:09:25Z', did: transitioned to done}
+  - {who: 'human:shaho', at: '2026-06-24T19:10:16Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-24T19:10:16Z', did: transitioned to in_review}
+  - {who: 'human:shaho', at: '2026-06-24T19:10:18Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-24T19:10:18Z', did: transitioned to done}
+  - {who: 'human:shaho', at: '2026-06-24T19:10:24Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-24T19:10:24Z', did: transitioned to in_review}
+  - {who: 'human:shaho', at: '2026-06-24T19:10:27Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-24T19:10:27Z', did: transitioned to done}
+  - {who: 'human:shaho', at: '2026-06-24T19:11:58Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-24T19:11:58Z', did: transitioned to in_review}
+  - {who: 'human:shaho', at: '2026-06-24T19:12:00Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-24T19:12:00Z', did: transitioned to done}
+  - {who: 'human:shaho', at: '2026-06-24T19:13:14Z', did: transitioned to in_progress}
+  - {who: 'human:shaho', at: '2026-06-24T19:13:17Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-24T19:13:17Z', did: transitioned to done}
+  - {who: 'human:shaho', at: '2026-06-24T19:13:35Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-24T19:13:35Z', did: transitioned to in_review}
+  - {who: 'human:shaho', at: '2026-06-24T19:14:43Z', did: transitioned to in_progress}
+  - {who: 'human:shaho', at: '2026-06-24T19:14:45Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-24T19:14:45Z', did: transitioned to in_review}
+  - {who: 'human:shaho', at: '2026-06-24T19:14:47Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-24T19:14:47Z', did: transitioned to done}
 assignee: agent:claude
 ---
 Backend foundation for real-time board sync. New `internal/server/events.go`.

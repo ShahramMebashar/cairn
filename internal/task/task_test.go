@@ -277,6 +277,40 @@ func TestReady(t *testing.T) {
 	}
 }
 
+// ReadyFunc/CanTransitionFunc resolve only a task's own deps on demand, so a status move
+// never has to load the whole board. Assert they match the map-backed wrappers and that the
+// resolver is asked for exactly the listed deps.
+func TestReadyFuncResolvesOnlyListedDeps(t *testing.T) {
+	all := graph(mk("A", "done"), mk("B", "in_progress"), mk("UNRELATED", "done"))
+	asked := map[string]int{}
+	resolve := func(id string) (Task, bool) {
+		asked[id]++
+		x, ok := all[id]
+		return x, ok
+	}
+
+	// Deps all closed -> ready; only A is queried, not the unrelated task.
+	ready := Task{ID: "T", Deps: []string{"A"}}
+	if !ReadyFunc(ready, resolve, rules) {
+		t.Fatalf("ReadyFunc = false, want true")
+	}
+	if asked["A"] == 0 || asked["UNRELATED"] != 0 {
+		t.Fatalf("resolver asked %v, want A queried and UNRELATED untouched", asked)
+	}
+
+	// One open dep blocks leaving the initial state.
+	blocked := Task{ID: "T", Status: rules.Initial, Deps: []string{"B"}}
+	if err := CanTransitionFunc(blocked, "in_progress", resolve, rules); !errors.Is(err, ErrDepsNotClosed) {
+		t.Fatalf("CanTransitionFunc err = %v, want ErrDepsNotClosed", err)
+	}
+
+	// Closed dep allows it.
+	okTask := Task{ID: "T", Status: rules.Initial, Deps: []string{"A"}}
+	if err := CanTransitionFunc(okTask, "in_progress", resolve, rules); err != nil {
+		t.Fatalf("CanTransitionFunc err = %v, want nil", err)
+	}
+}
+
 func TestValidateDeps(t *testing.T) {
 	tests := []struct {
 		name string

@@ -418,6 +418,7 @@ func (s *Server) status(root string) statusResp {
 			resp.States = cfg.States
 			resp.Closed = cfg.Closed
 			resp.Initial = cfg.Initial
+			resp.Review = cfg.Review()
 		}
 	}
 	return resp
@@ -433,6 +434,7 @@ type statusResp struct {
 	States          []string `json:"states,omitempty"`
 	Closed          []string `json:"closed,omitempty"`
 	Initial         string   `json:"initial,omitempty"`
+	Review          string   `json:"review,omitempty"`
 	Actor           string   `json:"actor"`
 	SuggestedActor  string   `json:"suggestedActor"`
 }

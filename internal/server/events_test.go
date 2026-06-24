@@ -146,6 +146,29 @@ func TestCoalesceMultipleTasksIsListLevel(t *testing.T) {
 	close(in)
 }
 
+// One task touched alongside its own session/live writes in the same window must still
+// target that task, so the open task detail refreshes live (regression: a coincident
+// session write used to downgrade this to a list-only refresh, leaving the detail stale).
+func TestCoalesceTaskWithSessionTargetsTask(t *testing.T) {
+	in := make(chan string, 8)
+	got := make(chan Event, 8)
+	go coalesce(in, 10*time.Millisecond, func(e Event) { got <- e })
+
+	in <- "/x/.cairn/tasks/PROJ-048.md"
+	in <- "/x/.cairn/sessions/ses_123.yaml"
+	in <- "/x/.cairn/live/ses_123.json"
+
+	select {
+	case e := <-got:
+		if e.Type != evtTaskChanged || e.ID != "PROJ-048" {
+			t.Fatalf("got %+v, want task-changed PROJ-048", e)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no event emitted")
+	}
+	close(in)
+}
+
 // A config change affects the board's states, so it is list-level too.
 func TestCoalesceConfigIsListLevel(t *testing.T) {
 	in := make(chan string, 8)

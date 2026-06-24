@@ -1,0 +1,21 @@
+id: ses_2224a25f2c5f288e7161a64c
+task: PROJ-01kvxj6cfxj513n2
+attempt: att_2224a25f2c5f288e7161a64c
+actor: agent:claude
+client: claude
+model: claude-opus-4-8
+status: finished
+idempotency_key: begin-shorten-ids-001
+started_at: 2026-06-24T19:37:37.642896Z
+branch: main
+ended_at: 2026-06-24T19:40:00Z
+summary: |-
+  Task IDs shortened from 16 to 10 chars (6 time + 4 random).
+
+  - internal/store/id.go: idTimeChars 10→6, idRandChars 6→4, new idEpoch=1704067200 (2024-01-01Z). Time prefix encodes seconds since that epoch (~34yr range to ~2058). New ids look like PROJ-k3m9x7q2vw.
+  - web/src/lib/filter.ts: effectiveRank now handles three eras — legacy numeric (sorts first), legacy 16-char (ms-since-1970), current 10-char (sec-since-2024) — discriminating by suffix length and normalizing both time formats to absolute ms so they interleave correctly.
+  - Tests: four {16}→{10} regexes; monotonic test uses a 1-second gap at seconds resolution.
+
+  Tradeoff (accepted by user): seconds precision drops sub-second creation-order tie-breaking; display order is governed by manual rank regardless. Existing 16-char ids are untouched and still sort correctly alongside new ones.
+
+  Verified: go test ./... and pnpm build green. Rebuilt bin/cairn — running MCP/web server must restart to start minting short ids. Review focus: confirm mixed old/new ordering on a real board looks right after restart.
