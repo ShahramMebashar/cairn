@@ -59,14 +59,15 @@ provenance:
   - {who: 'human:shaho', at: '2026-06-24T19:14:45Z', did: transitioned to in_review}
   - {who: 'human:shaho', at: '2026-06-24T19:14:47Z', did: ran checks}
   - {who: 'human:shaho', at: '2026-06-24T19:14:47Z', did: transitioned to done}
+  - {who: 'human:shaho', at: '2026-06-24T20:20:35Z', did: updated}
 assignee: agent:claude
 ---
 Backend foundation for real-time board sync. New `internal/server/events.go`.
 
 - `fsnotify` watcher on `.cairn/tasks/` and `.cairn/config.yaml` per project root.
-- Debounce ~100ms; coalesce duplicate write/chmod events. Parse task id from filename.
+- Debounce \~100ms; coalesce duplicate write/chmod events. Parse task id from filename.
 - Per-root subscriber hub; broadcast on debounced change.
 - Watcher started lazily on first subscriber for a root, stopped (ref-counted) on last disconnect.
 - Pure transport/adapter — no gate-logic changes. Add `fsnotify` dependency.
 
-See docs/superpowers/specs/2026-06-21-sse-realtime-and-check-output-design.md §A.
+See docs/superpowers/specs/2026-06-21-sse-realtime-and-check-output-design.md

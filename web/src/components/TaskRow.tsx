@@ -1,4 +1,5 @@
-import { CheckCircle2, GitBranch, UserPlus } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle2, GitBranch, MoreHorizontal, Trash2, UserPlus } from "lucide-react";
 import { Assignee } from "@/components/Assignee";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -10,8 +11,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { StatusIcon } from "@/components/StatusIcon";
-import { useClaim, useTransition } from "@/lib/queries";
+import { useClaim, useDeleteTask, useTransition } from "@/lib/queries";
 import { cn, statusLabel, timeAgo } from "@/lib/utils";
 import type { Status, Task } from "@/lib/api";
 
@@ -30,6 +32,8 @@ export function TaskRow({
 }) {
   const transition = useTransition(path);
   const claim = useClaim(path);
+  const deleteTask = useDeleteTask(path);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const checks = task.checks ?? [];
   const passed = checks.filter((c) => c.result === "pass").length;
@@ -154,6 +158,37 @@ export function TaskRow({
           <UserPlus className="size-3.5" />
         </button>
       )}
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild onClick={stop}>
+          <button
+            aria-label="Task actions"
+            className="grid size-5 shrink-0 place-items-center rounded text-muted-foreground opacity-0 hover:bg-foreground/10 hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+          >
+            <MoreHorizontal className="size-3.5" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" onClick={stop}>
+          <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(true)}>
+            <Trash2 /> Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <ConfirmDeleteDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={`Delete ${task.id}?`}
+        description={
+          <>
+            This permanently deletes <span className="font-medium">{task.title}</span>. Tasks with
+            sub-tasks or dependents can't be deleted until those are removed.
+          </>
+        }
+        confirmLabel="Delete task"
+        pending={deleteTask.isPending}
+        onConfirm={() => deleteTask.mutate(task.id, { onSuccess: () => setConfirmDelete(false) })}
+      />
     </div>
   );
 }

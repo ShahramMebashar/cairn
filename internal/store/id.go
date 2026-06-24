@@ -50,3 +50,19 @@ func mintTaskID(prefix string, at time.Time) (string, error) {
 	}
 	return fmt.Sprintf("%s-%s", prefix, out), nil
 }
+
+// mintNoteID returns a short collision-resistant id for a note provenance entry, e.g.
+// "n_k3m9x7q2". Uniqueness only needs to hold within one task's provenance list, so a
+// random Crockford tail (no time prefix) is enough; the "n_" prefix keeps it visually
+// distinct from task ids.
+func mintNoteID() (string, error) {
+	rb := make([]byte, 8)
+	if _, err := rand.Read(rb); err != nil {
+		return "", fmt.Errorf("store: generate note id: %w", err)
+	}
+	out := make([]byte, len(rb))
+	for i, b := range rb {
+		out[i] = crockford[b&31] // 256 is a multiple of 32, so b&31 is unbiased
+	}
+	return "n_" + string(out), nil
+}

@@ -22,16 +22,32 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CheckCircle2, GitBranch, Loader2, Plus, Search, SquareKanban } from "lucide-react";
+import {
+  CheckCircle2,
+  GitBranch,
+  Loader2,
+  MoreHorizontal,
+  Plus,
+  Search,
+  SquareKanban,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SelectItem } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { StatusIcon } from "@/components/StatusIcon";
 import { PriorityIcon, priorityLabel } from "@/components/PriorityIcon";
 import { Facet } from "@/components/Facet";
 import { EmptyState } from "@/components/EmptyState";
 import { Assignee } from "@/components/Assignee";
-import { useReorder, useTasks, useTransition } from "@/lib/queries";
+import { useDeleteTask, useReorder, useTasks, useTransition } from "@/lib/queries";
 import { effectiveRank } from "@/lib/filter";
 import { cn, statusLabel } from "@/lib/utils";
 import type { Status, Task } from "@/lib/api";
@@ -246,6 +262,7 @@ export function BoardView({
             {states.map((s) => (
               <Column
                 key={s}
+                path={path}
                 status={s}
                 info={status}
                 cardIds={cols[s] ?? []}
@@ -266,6 +283,7 @@ export function BoardView({
 }
 
 function Column({
+  path,
   status,
   info,
   cardIds,
@@ -274,6 +292,7 @@ function Column({
   pendingId,
   pendingLabel,
 }: {
+  path: string;
   status: string;
   info: Status;
   cardIds: string[];
@@ -303,6 +322,7 @@ function Column({
             return t ? (
               <SortableCard
                 key={id}
+                path={path}
                 task={t}
                 onOpenTask={onOpenTask}
                 busy={id === pendingId}
@@ -317,11 +337,13 @@ function Column({
 }
 
 function SortableCard({
+  path,
   task,
   onOpenTask,
   busy,
   busyLabel,
 }: {
+  path: string;
   task: Task;
   onOpenTask: (id: string) => void;
   busy?: boolean;
@@ -340,7 +362,7 @@ function SortableCard({
       role="button"
       tabIndex={0}
     >
-      {isDragging ? <DropIndicator /> : <Card task={task} busy={busy} busyLabel={busyLabel} />}
+      {isDragging ? <DropIndicator /> : <Card path={path} task={task} busy={busy} busyLabel={busyLabel} />}
     </div>
   );
 }
@@ -355,11 +377,13 @@ function DropIndicator() {
 }
 
 function Card({
+  path,
   task,
   dragging,
   busy,
   busyLabel,
 }: {
+  path?: string;
   task: Task;
   dragging?: boolean;
   busy?: boolean;
@@ -372,7 +396,7 @@ function Card({
     <div
       aria-busy={busy}
       className={cn(
-        "relative cursor-pointer rounded-lg border bg-panel p-2.5 text-left shadow-xs transition-shadow hover:border-foreground/20",
+        "group/card relative cursor-pointer rounded-lg border bg-panel p-2.5 text-left shadow-xs transition-shadow hover:border-foreground/20",
         dragging && "rotate-2 shadow-md",
       )}
     >
@@ -384,6 +408,7 @@ function Card({
       <div className="mb-1 flex items-center gap-1.5">
         <PriorityIcon priority={task.priority} />
         <span className="font-mono text-[11px] text-muted-foreground">{task.id}</span>
+        {path && <CardMenu path={path} task={task} />}
       </div>
       <div className="text-[13px] leading-snug">{task.title}</div>
       {(task.labels?.length || checks.length || task.deps?.length || task.assignee) && (
@@ -409,6 +434,47 @@ function Card({
           {task.assignee && <Assignee actor={task.assignee} />}
         </div>
       )}
+    </div>
+  );
+}
+
+// CardMenu is the per-card ••• action (delete). It stops pointer/click propagation so it
+// doesn't trigger the card's drag listeners or open-on-click.
+function CardMenu({ path, task }: { path: string; task: Task }) {
+  const deleteTask = useDeleteTask(path);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const stop = (e: React.MouseEvent | React.PointerEvent) => e.stopPropagation();
+  return (
+    <div className="ml-auto" onPointerDown={stop} onClick={stop}>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            aria-label="Task actions"
+            className="grid size-5 place-items-center rounded text-muted-foreground opacity-0 hover:bg-foreground/10 hover:text-foreground group-hover/card:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+          >
+            <MoreHorizontal className="size-3.5" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(true)}>
+            <Trash2 /> Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <ConfirmDeleteDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={`Delete ${task.id}?`}
+        description={
+          <>
+            This permanently deletes <span className="font-medium">{task.title}</span>. Tasks with
+            sub-tasks or dependents can't be deleted until those are removed.
+          </>
+        }
+        confirmLabel="Delete task"
+        pending={deleteTask.isPending}
+        onConfirm={() => deleteTask.mutate(task.id, { onSuccess: () => setConfirmDelete(false) })}
+      />
     </div>
   );
 }

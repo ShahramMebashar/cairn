@@ -12,14 +12,18 @@
 //	POST /api/init        { path?, prefix? }
 //	GET  /api/tasks       ?status&assignee&ready
 //	POST /api/tasks       { title, body?, deps?, checks? }
-//	GET  /api/tasks/{id}
-//	GET  /api/tasks/{id}/runs              -> { runs: [{ file, at, cmd, cwd, exit, timedout, duration, output }] }
-//	POST /api/tasks/{id}/transition  { to }
-//	POST /api/tasks/{id}/claim
-//	POST /api/tasks/{id}/run_checks  { only? }
-//	POST /api/tasks/{id}/attest      { index, pass? }   -> attest a manual check (pass defaults true)
-//	POST /api/tasks/{id}/note        { text }
-//	GET  /api/events      ?path                  -> text/event-stream of { type, id? } change signals
+//	GET    /api/tasks/{id}
+//	DELETE /api/tasks/{id}                            -> { id, deleted } ; refused if it has children/dependents
+//	GET    /api/tasks/{id}/runs            -> { runs: [{ file, at, cmd, cwd, exit, timedout, duration, output }] }
+//	POST   /api/tasks/{id}/update    { title?, body?, checks?, priority?, labels?, parent? }
+//	POST   /api/tasks/{id}/transition  { to }
+//	POST   /api/tasks/{id}/claim
+//	POST   /api/tasks/{id}/run_checks  { only? }
+//	POST   /api/tasks/{id}/attest      { index, pass? }   -> attest a manual check (pass defaults true)
+//	POST   /api/tasks/{id}/note        { text }
+//	PATCH  /api/tasks/{id}/notes/{note}  { text }         -> edit a note (?index= for a legacy note, {note}="-")
+//	DELETE /api/tasks/{id}/notes/{note}                   -> delete a note (?index= for a legacy note, {note}="-")
+//	GET    /api/events      ?path                  -> text/event-stream of { type, id? } change signals
 package server
 
 import (
@@ -65,6 +69,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/tasks", s.handleList)
 	mux.HandleFunc("POST /api/tasks", s.handleCreate)
 	mux.HandleFunc("GET /api/tasks/{id}", s.handleGet)
+	mux.HandleFunc("DELETE /api/tasks/{id}", s.handleDelete)
 	mux.HandleFunc("GET /api/tasks/{id}/runs", s.handleRuns)
 	mux.HandleFunc("GET /api/tasks/{id}/sessions", s.handleListTaskSessions)
 	mux.HandleFunc("POST /api/tasks/{id}/sessions/begin", s.handleBeginSession)
@@ -81,6 +86,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/tasks/{id}/run_checks", s.handleRunChecks)
 	mux.HandleFunc("POST /api/tasks/{id}/attest", s.handleAttest)
 	mux.HandleFunc("POST /api/tasks/{id}/note", s.handleNote)
+	mux.HandleFunc("PATCH /api/tasks/{id}/notes/{note}", s.handleEditNote)
+	mux.HandleFunc("DELETE /api/tasks/{id}/notes/{note}", s.handleDeleteNote)
 	return mux
 }
 
@@ -265,9 +272,12 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateReq struct {
-	Priority *string   `json:"priority"`
-	Labels   *[]string `json:"labels"`
-	Parent   *string   `json:"parent"`
+	Priority *string     `json:"priority"`
+	Labels   *[]string   `json:"labels"`
+	Parent   *string     `json:"parent"`
+	Title    *string     `json:"title"`
+	Body     *string     `json:"body"`
+	Checks   *[]checkDTO `json:"checks"`
 }
 
 type reorderReq struct {
@@ -296,7 +306,81 @@ func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	var req updateReq
 	decode(r, &req)
-	doc, err := svc.Update(r.PathValue("id"), mcp.UpdateFields{Priority: req.Priority, Labels: req.Labels, Parent: req.Parent})
+	f := mcp.UpdateFields{Priority: req.Priority, Labels: req.Labels, Parent: req.Parent, Title: req.Title, Body: req.Body}
+	if req.Checks != nil {
+		checks := make([]task.Check, 0, len(*req.Checks))
+		for _, c := range *req.Checks {
+			result := c.Result
+			if result == "" {
+				result = "pending"
+			}
+			checks = append(checks, task.Check{Desc: c.Desc, Cmd: c.Cmd, Type: c.Type, Cwd: c.Cwd, Timeout: c.Timeout, Result: result})
+		}
+		f.Checks = &checks
+	}
+	doc, err := svc.Update(r.PathValue("id"), f)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, dtoFromDoc(svc, doc))
+}
+
+func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
+	svc, _, ok := s.svcFor(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+	if err := svc.Delete(id); err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"id": id, "deleted": true})
+}
+
+type editNoteReq struct {
+	Text string `json:"text"`
+}
+
+// noteRef resolves how a note sub-resource request addresses its target: by stable id
+// (the {note} path segment) or, for a legacy note, by 0-based index (?index=, with {note}
+// set to the "-" sentinel).
+func noteRef(r *http.Request) (noteID string, index int) {
+	noteID = r.PathValue("note")
+	index = -1
+	if v := r.URL.Query().Get("index"); v != "" {
+		index, _ = strconv.Atoi(v)
+	}
+	if noteID == "-" {
+		noteID = ""
+	}
+	return noteID, index
+}
+
+func (s *Server) handleEditNote(w http.ResponseWriter, r *http.Request) {
+	svc, _, ok := s.svcFor(w, r)
+	if !ok {
+		return
+	}
+	var req editNoteReq
+	decode(r, &req)
+	noteID, index := noteRef(r)
+	doc, err := svc.EditNote(r.PathValue("id"), noteID, index, req.Text)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, dtoFromDoc(svc, doc))
+}
+
+func (s *Server) handleDeleteNote(w http.ResponseWriter, r *http.Request) {
+	svc, _, ok := s.svcFor(w, r)
+	if !ok {
+		return
+	}
+	noteID, index := noteRef(r)
+	doc, err := svc.DeleteNote(r.PathValue("id"), noteID, index)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -469,10 +553,12 @@ type checkDTO struct {
 }
 
 type provDTO struct {
-	Who  string `json:"who"`
-	At   string `json:"at"`
-	Did  string `json:"did"`
-	Text string `json:"text,omitempty"`
+	ID       string `json:"id,omitempty"`
+	Who      string `json:"who"`
+	At       string `json:"at"`
+	Did      string `json:"did"`
+	Text     string `json:"text,omitempty"`
+	EditedAt string `json:"editedAt,omitempty"`
 }
 
 func dtoFromTask(t task.Task, ready bool) taskDTO {
@@ -493,7 +579,7 @@ func dtoFromDoc(svc *mcp.Service, doc *store.Doc) taskDTO {
 		d.UpdatedAt = doc.Provenance[n-1].At
 	}
 	for _, p := range doc.Provenance {
-		d.Provenance = append(d.Provenance, provDTO{Who: p.Who, At: p.At, Did: p.Did, Text: p.Text})
+		d.Provenance = append(d.Provenance, provDTO{ID: p.ID, Who: p.Who, At: p.At, Did: p.Did, Text: p.Text, EditedAt: p.EditedAt})
 	}
 	return d
 }
@@ -515,6 +601,8 @@ func writeErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		code = http.StatusNotFound
+	case errors.Is(err, store.ErrNoteNotFound):
+		code = http.StatusNotFound
 	case errors.Is(err, store.ErrSessionNotFound):
 		code = http.StatusNotFound
 	case errors.Is(err, mcp.ErrAlreadyClaimed),
@@ -531,6 +619,10 @@ func writeErr(w http.ResponseWriter, err error) {
 		errors.Is(err, task.ErrDanglingDep),
 		errors.Is(err, task.ErrCycle),
 		errors.Is(err, task.ErrInvalidPriority),
+		errors.Is(err, task.ErrHasChildren),
+		errors.Is(err, task.ErrHasDependents),
+		errors.Is(err, store.ErrNotEditable),
+		errors.Is(err, mcp.ErrEmptyTitle),
 		errors.Is(err, mcp.ErrNotManual),
 		errors.Is(err, mcp.ErrIdentityMismatch),
 		errors.Is(err, mcp.ErrClientMismatch),

@@ -362,3 +362,23 @@ func TestValidateParents(t *testing.T) {
 		t.Fatalf("parent cycle: %v", err)
 	}
 }
+
+func TestValidateDeletable(t *testing.T) {
+	all := graph(
+		Task{ID: "A"},
+		Task{ID: "B", Parent: "A"},
+		Task{ID: "C", Deps: []string{"A"}},
+		Task{ID: "D"},
+	)
+	if err := ValidateDeletable("D", all); err != nil {
+		t.Fatalf("leaf D should be deletable: %v", err)
+	}
+	if err := ValidateDeletable("A", all); !errors.Is(err, ErrHasChildren) {
+		t.Fatalf("A has child B: %v, want ErrHasChildren", err)
+	}
+	// Remove the child so the dependents rule is what blocks A.
+	noChild := graph(Task{ID: "A"}, Task{ID: "C", Deps: []string{"A"}})
+	if err := ValidateDeletable("A", noChild); !errors.Is(err, ErrHasDependents) {
+		t.Fatalf("A has dependent C: %v, want ErrHasDependents", err)
+	}
+}

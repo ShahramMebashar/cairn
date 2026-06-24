@@ -158,7 +158,10 @@ func TestInitAppendsRefToExistingAgentDocOnce(t *testing.T) {
 	if !strings.Contains(s, ".cairn/WORKFLOW.md") {
 		t.Fatal("workflow ref not added")
 	}
-	if n := strings.Count(s, "## Task workflow"); n != 1 {
-		t.Fatalf("workflow section added %d times, want 1 (idempotent)", n)
+	if !strings.Contains(s, "Agent loop — required") {
+		t.Fatal("agent-loop block not embedded")
+	}
+	if n := strings.Count(s, agentLoopStart); n != 1 {
+		t.Fatalf("agent-loop block added %d times, want 1 (idempotent in-place refresh)", n)
 	}
 }

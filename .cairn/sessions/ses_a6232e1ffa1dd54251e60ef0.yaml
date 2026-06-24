@@ -1,0 +1,11 @@
+id: ses_a6232e1ffa1dd54251e60ef0
+task: PROJ-01kvxjq9f9jtmdbw
+attempt: att_a6232e1ffa1dd54251e60ef0
+actor: agent:claude
+client: claude
+model: claude-opus-4-8
+status: finished
+idempotency_key: begin-edit-delete-20260624-194700
+started_at: 2026-06-24T19:46:49.099237Z
+ended_at: 2026-06-24T20:01:36Z
+summary: 'Implemented edit/delete for tasks, subtasks, and activity notes across store→service→MCP→HTTP→web. Edit task = title+body+checks (reuses `update`); delete task is hard-delete blocked by children/dependents (`task.ValidateDeletable`); notes get a stable id and can be edited (in place + `editedAt`) or deleted by anyone, with a legacy index fallback. New MCP tools: `delete`, `edit_note`, `delete_note` (require `cairn serve` restart to appear). New HTTP: `DELETE /api/tasks/{id}`, `PATCH|DELETE /api/tasks/{id}/notes/{note}`. Web: inline title/body/checks editors, ••• delete with AlertDialog on TaskDetail/Board/list/sub-tasks, note edit/delete in ActivityEntry. Verified via go test ./... (added store/task/mcp/server tests), go vet, gofmt, pnpm build, and a live HTTP smoke covering create→edit→blocked-delete→note edit/delete→system-entry-422→leaf deletes. To review: run `go test ./...` and `pnpm build`; restart `cairn serve` to expose the new MCP tools.'

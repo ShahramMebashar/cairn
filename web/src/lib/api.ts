@@ -12,7 +12,14 @@ export type Check = {
   timeout?: number;
 };
 
-export type Provenance = { who: string; at: string; did: string; text?: string };
+export type Provenance = {
+  id?: string; // stable id, present on note entries only (used to edit/delete)
+  who: string;
+  at: string;
+  did: string;
+  text?: string;
+  editedAt?: string; // set when a note is edited in place
+};
 
 export type ExecutionState = "active" | "stalled" | "awaiting_review";
 
@@ -79,6 +86,9 @@ export type UpdateFields = {
   priority?: string;
   labels?: string[];
   parent?: string;
+  title?: string;
+  body?: string;
+  checks?: Check[];
 };
 
 export type Status = {
@@ -165,3 +175,20 @@ export const listTaskSessions = (path: string, id: string) =>
 
 export const attestTask = (path: string, id: string, index: number, pass: boolean) =>
   req<Task>("POST", `/api/tasks/${id}/attest?path=${enc(path)}`, { index, pass });
+
+export const deleteTask = (path: string, id: string) =>
+  req<{ id: string; deleted: boolean }>("DELETE", `/api/tasks/${id}?path=${enc(path)}`);
+
+// noteURL addresses a note by its stable id, or by 0-based provenance index for a legacy
+// note with no id (server sentinel segment "-" + ?index=).
+const noteURL = (path: string, id: string, note?: string, index?: number) => {
+  const seg = note ? enc(note) : "-";
+  const idx = note ? "" : `&index=${index ?? -1}`;
+  return `/api/tasks/${id}/notes/${seg}?path=${enc(path)}${idx}`;
+};
+
+export const editNote = (path: string, id: string, text: string, note?: string, index?: number) =>
+  req<Task>("PATCH", noteURL(path, id, note, index), { text });
+
+export const deleteNote = (path: string, id: string, note?: string, index?: number) =>
+  req<Task>("DELETE", noteURL(path, id, note, index));

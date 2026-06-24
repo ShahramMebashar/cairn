@@ -232,3 +232,42 @@ export function useAddNote(path: string) {
     onError: fail,
   });
 }
+
+export function useDeleteTask(path: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteTask(path, id),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: tasksKey(path) });
+      qc.removeQueries({ queryKey: taskKey(path, r.id) });
+      toast.success(`Deleted ${r.id}`);
+    },
+    onError: fail,
+  });
+}
+
+export function useEditNote(path: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, text, note, index }: { id: string; text: string; note?: string; index?: number }) =>
+      api.editNote(path, id, text, note, index),
+    onSuccess: (t) => {
+      refresh(qc, path, t.id);
+      toast.success("Note updated");
+    },
+    onError: fail,
+  });
+}
+
+export function useDeleteNote(path: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, note, index }: { id: string; note?: string; index?: number }) =>
+      api.deleteNote(path, id, note, index),
+    onSuccess: (t) => {
+      refresh(qc, path, t.id);
+      toast.success("Note deleted");
+    },
+    onError: fail,
+  });
+}

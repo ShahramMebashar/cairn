@@ -291,6 +291,87 @@ func TestUpdateFields(t *testing.T) {
 func ptr(s string) *string          { return &s }
 func ptrSlice(s []string) *[]string { return &s }
 
+func TestUpdateTitleBodyChecks(t *testing.T) {
+	svc := service(t, "agent:a")
+	d, _ := svc.Create(store.Draft{Title: "old", Body: "old body\n"})
+
+	got, err := svc.Update(d.Task.ID, UpdateFields{
+		Title:  ptr("new title"),
+		Body:   ptr("new body\n"),
+		Checks: &[]task.Check{{Desc: "tests", Cmd: "go test ./...", Result: "pending"}},
+	})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if got.Task.Title != "new title" || got.Body != "new body\n" || len(got.Task.Checks) != 1 {
+		t.Fatalf("edit not applied: %+v body=%q", got.Task, got.Body)
+	}
+
+	// empty title rejected
+	if _, err := svc.Update(d.Task.ID, UpdateFields{Title: ptr("  ")}); !errors.Is(err, ErrEmptyTitle) {
+		t.Fatalf("empty title = %v, want ErrEmptyTitle", err)
+	}
+}
+
+func TestDelete(t *testing.T) {
+	svc := service(t, "agent:a")
+	parent, _ := svc.Create(store.Draft{Title: "parent"})
+	child, _ := svc.Create(store.Draft{Title: "child", Parent: parent.Task.ID})
+
+	// parent blocked by child
+	if err := svc.Delete(parent.Task.ID); !errors.Is(err, task.ErrHasChildren) {
+		t.Fatalf("delete parent = %v, want ErrHasChildren", err)
+	}
+	// child is a leaf: deletable
+	if err := svc.Delete(child.Task.ID); err != nil {
+		t.Fatalf("delete child: %v", err)
+	}
+	if _, err := svc.Get(child.Task.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("get deleted = %v, want ErrNotFound", err)
+	}
+	// now parent is a leaf too
+	if err := svc.Delete(parent.Task.ID); err != nil {
+		t.Fatalf("delete parent after child gone: %v", err)
+	}
+}
+
+func TestEditAndDeleteNote(t *testing.T) {
+	svc := service(t, "agent:a")
+	d, _ := svc.Create(store.Draft{Title: "x"})
+	noted, _ := svc.Note(d.Task.ID, "first")
+	noteID := noted.Provenance[len(noted.Provenance)-1].ID
+	if noteID == "" {
+		t.Fatal("note should have an id")
+	}
+
+	// anyone (a different actor) can edit
+	other := NewService(svc.store, "agent:b", svc.now)
+	edited, err := other.EditNote(d.Task.ID, noteID, -1, "edited")
+	if err != nil {
+		t.Fatalf("EditNote: %v", err)
+	}
+	last := edited.Provenance[len(edited.Provenance)-1]
+	if last.Text != "edited" || last.EditedAt == "" {
+		t.Fatalf("note not edited: %+v", last)
+	}
+
+	// editing a system entry is refused
+	if _, err := svc.EditNote(d.Task.ID, "", 0, "nope"); !errors.Is(err, store.ErrNotEditable) {
+		t.Fatalf("edit system = %v, want ErrNotEditable", err)
+	}
+
+	// delete the note
+	after, err := other.DeleteNote(d.Task.ID, noteID, -1)
+	if err != nil {
+		t.Fatalf("DeleteNote: %v", err)
+	}
+	for _, p := range after.Provenance {
+		if p.ID == noteID {
+			t.Fatal("note not deleted")
+		}
+	}
+}
+
 func TestReorderAddsNoProvenance(t *testing.T) {
 	svc := service(t, "agent:a")
 	d, _ := svc.Create(store.Draft{Title: "x"})

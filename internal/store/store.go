@@ -37,6 +37,13 @@ var ErrNotFound = errors.New("task not found")
 // clobber the newer state (optimistic concurrency, SPEC §8).
 var ErrConflict = errors.New("task changed since it was read")
 
+// ErrNotEditable is returned when addressing a non-note provenance entry for edit/delete:
+// only note entries (Did=="note") are mutable.
+var ErrNotEditable = errors.New("only note provenance entries can be edited or deleted")
+
+// ErrNoteNotFound is returned when the addressed note entry does not exist.
+var ErrNoteNotFound = errors.New("note not found")
+
 // Store is rooted at a repo containing .cairn/. The mutex serializes goroutines sharing
 // this instance; Write also takes a repository-wide OS lock for other Cairn processes.
 // Reads stay lock-free because atomic rename prevents half-written files.
@@ -64,16 +71,20 @@ func (s *Store) RunsDir() string { return filepath.Join(s.root, ".cairn", "runs"
 // Config loads config.yaml fresh (read-fresh, SPEC §8).
 func (s *Store) Config() (config.Config, error) { return config.Load(s.configPath()) }
 
-// Provenance is one append-only audit entry (SPEC §2, §7).
+// Provenance is one audit entry (SPEC §2, §7). System entries (created/transitioned/...)
+// are append-only; note entries (Did=="note") carry a stable ID so they can be edited or
+// deleted in place, and EditedAt records the last edit.
 type Provenance struct {
-	Who  string `yaml:"who"`
-	At   string `yaml:"at"`
-	Did  string `yaml:"did"`
-	Text string `yaml:"text,omitempty"`
+	ID       string `yaml:"id,omitempty"` // stable id, present on note entries only
+	Who      string `yaml:"who"`
+	At       string `yaml:"at"`
+	Did      string `yaml:"did"`
+	Text     string `yaml:"text,omitempty"`
+	EditedAt string `yaml:"editedAt,omitempty"` // set when a note is edited in place
 }
 
 // Doc is a parsed task file: the typed view for reads plus the raw frontmatter node and
-// body needed for lossless writes. Body is immutable to the engine after create.
+// body needed for lossless writes.
 type Doc struct {
 	Task       task.Task
 	Provenance []Provenance
@@ -304,6 +315,35 @@ func (d *Doc) SetActiveAttempt(id string) error {
 	return nil
 }
 
+// SetTitle updates the title value node and the typed mirror.
+func (d *Doc) SetTitle(title string) error {
+	setScalar(d.mapping(), "title", strNode(title))
+	d.Task.Title = title
+	return nil
+}
+
+// SetBody replaces the markdown body. The body lives outside the frontmatter node and is
+// written byte-for-byte by save, so this is a plain field assignment; the caller owns any
+// normalization.
+func (d *Doc) SetBody(body string) error {
+	d.Body = body
+	return nil
+}
+
+// SetChecks replaces the entire checks sequence node and the typed mirror. Callers carry
+// forward each retained check's Result; checksNode defaults an empty Result to "pending",
+// so newly-added checks come out pending. Clearing to empty removes the key.
+func (d *Doc) SetChecks(checks []task.Check) error {
+	m := d.mapping()
+	if len(checks) == 0 {
+		removeKey(m, "checks")
+	} else {
+		setScalar(m, "checks", checksNode(checks))
+	}
+	d.Task.Checks = checks
+	return nil
+}
+
 // SetCheckResult writes the result of the check at index i (engine-managed, SPEC §6).
 func (d *Doc) SetCheckResult(i int, result string) error {
 	checks, ok := mapGet(d.mapping(), "checks")
@@ -318,7 +358,9 @@ func (d *Doc) SetCheckResult(i int, result string) error {
 }
 
 // AppendProvenance appends one audit entry to the provenance sequence, creating it if
-// absent (SPEC §7: every write appends one). Entries are flow-style for clean diffs.
+// absent (SPEC §7: every write appends one). Entries are flow-style for clean diffs. Note
+// entries get a stable id (so they can be edited/deleted later); system entries stay
+// byte-identical to before this capability was added.
 func (d *Doc) AppendProvenance(who, did, text string, at time.Time) error {
 	m := d.mapping()
 	seq, ok := mapGet(m, "provenance")
@@ -326,14 +368,109 @@ func (d *Doc) AppendProvenance(who, did, text string, at time.Time) error {
 		seq = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
 		m.Content = append(m.Content, strNode("provenance"), seq)
 	}
-	entry := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Style: yaml.FlowStyle,
-		Content: []*yaml.Node{strNode("who"), strNode(who), strNode("at"), tsNode(at), strNode("did"), strNode(did)}}
+	var id string
+	entry := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Style: yaml.FlowStyle}
+	if did == "note" {
+		var err error
+		if id, err = mintNoteID(); err != nil {
+			return err
+		}
+		entry.Content = append(entry.Content, strNode("id"), strNode(id))
+	}
+	entry.Content = append(entry.Content,
+		strNode("who"), strNode(who), strNode("at"), tsNode(at), strNode("did"), strNode(did))
 	if text != "" {
 		entry.Content = append(entry.Content, strNode("text"), strNode(text))
 	}
 	seq.Content = append(seq.Content, entry)
-	d.Provenance = append(d.Provenance, Provenance{Who: who, At: at.UTC().Format(time.RFC3339), Did: did, Text: text})
+	d.Provenance = append(d.Provenance, Provenance{ID: id, Who: who, At: at.UTC().Format(time.RFC3339), Did: did, Text: text})
 	return nil
+}
+
+// findProvenance locates the provenance sequence node and the index of the target entry,
+// addressing by id first (notes minted with one) and falling back to position (legacy notes
+// with no id; pass id=="" and a 0-based index). seq.Content[i] aligns 1:1 with d.Provenance[i]
+// because parse and AppendProvenance build both lists in lockstep.
+func (d *Doc) findProvenance(id string, index int) (seq *yaml.Node, entry *yaml.Node, i int, err error) {
+	m := d.mapping()
+	seq, ok := mapGet(m, "provenance")
+	if !ok || seq.Kind != yaml.SequenceNode {
+		return nil, nil, -1, ErrNoteNotFound
+	}
+	if id != "" {
+		for j, n := range seq.Content {
+			if v, ok := mapGet(n, "id"); ok && v.Value == id {
+				return seq, n, j, nil
+			}
+		}
+		return nil, nil, -1, fmt.Errorf("%w: %s", ErrNoteNotFound, id)
+	}
+	if index < 0 || index >= len(seq.Content) {
+		return nil, nil, -1, fmt.Errorf("%w: index %d", ErrNoteNotFound, index)
+	}
+	return seq, seq.Content[index], index, nil
+}
+
+// isNoteNode reports whether a provenance entry node is a free-text note (Did=="note").
+func isNoteNode(entry *yaml.Node) bool {
+	v, ok := mapGet(entry, "did")
+	return ok && v.Value == "note"
+}
+
+// EditNote rewrites a note's text in place and stamps editedAt. Only note entries are
+// editable; system entries are refused with ErrNotEditable. Address by id (preferred) or,
+// for a legacy note without one, by 0-based provenance index (id=="").
+func (d *Doc) EditNote(id string, index int, text string, at time.Time) error {
+	_, entry, i, err := d.findProvenance(id, index)
+	if err != nil {
+		return err
+	}
+	if !isNoteNode(entry) {
+		return ErrNotEditable
+	}
+	setScalar(entry, "text", strNode(text))
+	setScalar(entry, "editedAt", tsNode(at))
+	d.Provenance[i].Text = text
+	d.Provenance[i].EditedAt = at.UTC().Format(time.RFC3339)
+	return nil
+}
+
+// DeleteNote splices a note entry out of the provenance sequence and the typed mirror. Only
+// note entries are deletable; system entries are refused with ErrNotEditable.
+func (d *Doc) DeleteNote(id string, index int) error {
+	seq, entry, i, err := d.findProvenance(id, index)
+	if err != nil {
+		return err
+	}
+	if !isNoteNode(entry) {
+		return ErrNotEditable
+	}
+	seq.Content = append(seq.Content[:i], seq.Content[i+1:]...)
+	d.Provenance = append(d.Provenance[:i], d.Provenance[i+1:]...)
+	return nil
+}
+
+// DeleteTask hard-deletes a task file. It refuses if any task names this id as its parent
+// (children) or lists it in deps (dependents), since deleting would orphan the graph
+// (ValidateParents/ValidateDeps would then fail on load). The scan and unlink happen under
+// the repository write lock so a child created concurrently can't slip through.
+func (s *Store) DeleteTask(id, actor string) error {
+	return s.Write(context.Background(), actor, "delete task", func(tx *WriteTx) error {
+		if _, err := os.Stat(s.taskPath(id)); errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("%w: %s", ErrNotFound, id)
+		}
+		all, err := tx.Tasks() // validated board snapshot under the lock
+		if err != nil {
+			return err
+		}
+		if err := task.ValidateDeletable(id, all); err != nil {
+			return err
+		}
+		if err := os.Remove(s.taskPath(id)); err != nil {
+			return fmt.Errorf("store: delete %s: %w", id, err)
+		}
+		return nil
+	})
 }
 
 // Save renders the Doc and writes it atomically under the repository write lock (SPEC §8).

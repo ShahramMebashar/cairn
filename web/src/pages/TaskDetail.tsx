@@ -8,8 +8,11 @@ import {
   CircleX,
   CornerLeftUp,
   Loader2,
+  MoreHorizontal,
+  Pencil,
   Play,
   Plus,
+  Trash2,
   UserPlus,
   X,
 } from "lucide-react";
@@ -19,6 +22,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Assignee } from "@/components/Assignee";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import {
   Select,
   SelectContent,
@@ -44,6 +54,9 @@ import {
   useAddNote,
   useAttest,
   useClaim,
+  useDeleteNote,
+  useDeleteTask,
+  useEditNote,
   useRunChecks,
   useRuns,
   useTask,
@@ -80,7 +93,11 @@ export function TaskDetail({
   const attest = useAttest(path);
   const addNote = useAddNote(path);
   const update = useUpdateTask(path);
+  const deleteTask = useDeleteTask(path);
+  const editNote = useEditNote(path);
+  const deleteNote = useDeleteNote(path);
   const [note, setNote] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   // Persist the resizable split (main / properties) to localStorage.
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
@@ -102,7 +119,38 @@ export function TaskDetail({
           <ChevronRight className="size-3.5 text-muted-foreground" />
           <span className="font-mono text-muted-foreground">{id}</span>
         </div>
+        {task && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="ml-auto" aria-label="Task actions">
+                <MoreHorizontal />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(true)}>
+                <Trash2 /> Delete task
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </header>
+
+      {task && (
+        <ConfirmDeleteDialog
+          open={confirmDelete}
+          onOpenChange={setConfirmDelete}
+          title={`Delete ${task.id}?`}
+          description={
+            <>
+              This permanently deletes <span className="font-medium">{task.title}</span>. Tasks with
+              sub-tasks or dependents can't be deleted until those are removed.
+            </>
+          }
+          confirmLabel="Delete task"
+          pending={deleteTask.isPending}
+          onConfirm={() => deleteTask.mutate(task.id, { onSuccess: onBack })}
+        />
+      )}
 
       {isLoading ? (
         <div className="mx-auto w-full max-w-2xl space-y-4 p-8">
@@ -143,9 +191,14 @@ export function TaskDetail({
                 <StatusIcon status={task.status} closed={status.closed} initial={status.initial} />
                 <span className="font-mono text-xs text-muted-foreground">{task.id}</span>
               </div>
-              <h1 className="text-2xl font-semibold tracking-tight">{task.title}</h1>
+              <EditableTitle
+                title={task.title}
+                saving={update.isPending}
+                onSave={(title) => update.mutate({ id: task.id, fields: { title } })}
+              />
 
               <SubTasks
+                path={path}
                 parentId={task.id}
                 all={allTasks ?? []}
                 status={status}
@@ -153,7 +206,11 @@ export function TaskDetail({
                 onAddSubtask={() => onAddSubtask(task.id)}
               />
 
-              {task.body?.trim() && <Markdown className="mt-5">{task.body.trim()}</Markdown>}
+              <EditableBody
+                body={task.body ?? ""}
+                saving={update.isPending}
+                onSave={(body) => update.mutate({ id: task.id, fields: { body } })}
+              />
 
               <SessionTimeline
                 sessions={sessions ?? []}
@@ -168,7 +225,15 @@ export function TaskDetail({
                 </h2>
                 <ol className="mt-3 space-y-3.5">
                   {(task.provenance ?? []).map((p, i) => (
-                    <ActivityEntry key={i} entry={p} />
+                    <ActivityEntry
+                      key={p.id || i}
+                      entry={p}
+                      onEdit={(text) =>
+                        editNote.mutate({ id: task.id, text, note: p.id, index: i })
+                      }
+                      onDelete={() => deleteNote.mutate({ id: task.id, note: p.id, index: i })}
+                      saving={editNote.isPending || deleteNote.isPending}
+                    />
                   ))}
                 </ol>
 
@@ -345,52 +410,16 @@ export function TaskDetail({
               </Prop>
             )}
 
-            {task.checks && task.checks.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                    Checks
-                    <span
-                      className={cn(
-                        "tabular-nums",
-                        task.checks.every((c) => c.result === "pass") && "text-success",
-                      )}
-                    >
-                      {task.checks.filter((c) => c.result === "pass").length}/{task.checks.length}
-                    </span>
-                  </h3>
-                  {(task.checks ?? []).some((c) => c.cmd) && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-6 gap-1 px-2 text-xs"
-                      disabled={runChecks.isPending}
-                      onClick={() => runChecks.mutate({ id: task.id })}
-                    >
-                      {runChecks.isPending ? (
-                        <Loader2 className="size-3 animate-spin" />
-                      ) : (
-                        <Play className="size-3" />
-                      )}
-                      Run
-                    </Button>
-                  )}
-                </div>
-                <div className="divide-y overflow-hidden rounded-lg border">
-                  {task.checks.map((c, i) => (
-                    <CheckRow
-                      key={i}
-                      check={c}
-                      // Latest run for this check, matched by command (runs are newest-first).
-                      run={c.cmd ? (runs ?? []).find((r) => r.cmd === c.cmd) : undefined}
-                      running={runChecks.isPending}
-                      onAttest={(pass) => attest.mutate({ id: task.id, index: i, pass })}
-                      attesting={attest.isPending}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
+            <ChecksSection
+              checks={task.checks ?? []}
+              runs={runs ?? []}
+              running={runChecks.isPending}
+              saving={update.isPending}
+              onRun={() => runChecks.mutate({ id: task.id })}
+              onAttest={(i, pass) => attest.mutate({ id: task.id, index: i, pass })}
+              attesting={attest.isPending}
+              onSave={(checks) => update.mutate({ id: task.id, fields: { checks } })}
+            />
             </aside>
           </ResizablePanel>
         </ResizablePanelGroup>
@@ -527,12 +556,14 @@ function CheckRow({
 }
 
 function SubTasks({
+  path,
   parentId,
   all,
   status,
   onOpenTask,
   onAddSubtask,
 }: {
+  path: string;
   parentId: string;
   all: Task[];
   status: Status;
@@ -542,6 +573,8 @@ function SubTasks({
   const children = all.filter((t) => t.parent === parentId);
   const closed = new Set(status.closed ?? []);
   const done = children.filter((c) => closed.has(c.status)).length;
+  const deleteTask = useDeleteTask(path);
+  const [pendingDelete, setPendingDelete] = useState<Task | null>(null);
 
   return (
     <section className="mt-6">
@@ -561,19 +594,347 @@ function SubTasks({
       {children.length > 0 && (
         <div className="mt-2 divide-y rounded-lg border">
           {children.map((c) => (
-            <button
+            <div
               key={c.id}
-              onClick={() => onOpenTask(c.id)}
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-foreground/[0.04]"
+              className="group/sub flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-foreground/[0.04]"
             >
-              <StatusIcon status={c.status} closed={status.closed} initial={status.initial} className="size-3.5" />
-              <span className="w-16 shrink-0 font-mono text-xs text-muted-foreground">{c.id}</span>
-              <span className="truncate">{c.title}</span>
-            </button>
+              <button
+                onClick={() => onOpenTask(c.id)}
+                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+              >
+                <StatusIcon status={c.status} closed={status.closed} initial={status.initial} className="size-3.5" />
+                <span className="w-16 shrink-0 font-mono text-xs text-muted-foreground">{c.id}</span>
+                <span className="truncate">{c.title}</span>
+              </button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6 shrink-0 text-destructive opacity-0 transition-opacity group-hover/sub:opacity-100"
+                aria-label={`Delete ${c.id}`}
+                onClick={() => setPendingDelete(c)}
+              >
+                <Trash2 className="size-3.5" />
+              </Button>
+            </div>
           ))}
         </div>
       )}
+      <ConfirmDeleteDialog
+        open={!!pendingDelete}
+        onOpenChange={(o) => !o && setPendingDelete(null)}
+        title={pendingDelete ? `Delete ${pendingDelete.id}?` : ""}
+        description={
+          <>
+            This permanently deletes{" "}
+            <span className="font-medium">{pendingDelete?.title}</span>. Sub-tasks with their own
+            children or dependents can't be deleted until those are removed.
+          </>
+        }
+        confirmLabel="Delete sub-task"
+        pending={deleteTask.isPending}
+        onConfirm={() =>
+          pendingDelete &&
+          deleteTask.mutate(pendingDelete.id, { onSuccess: () => setPendingDelete(null) })
+        }
+      />
     </section>
+  );
+}
+
+// EditableTitle shows the task title as a heading; clicking it (or the pencil) swaps in an
+// input. Enter/blur saves a non-empty change; Escape cancels.
+function EditableTitle({
+  title,
+  saving,
+  onSave,
+}: {
+  title: string;
+  saving: boolean;
+  onSave: (title: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(title);
+
+  if (editing) {
+    const commit = () => {
+      const v = value.trim();
+      if (v && v !== title) onSave(v);
+      setEditing(false);
+    };
+    return (
+      <Input
+        autoFocus
+        value={value}
+        disabled={saving}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          } else if (e.key === "Escape") {
+            setValue(title);
+            setEditing(false);
+          }
+        }}
+        className="!text-2xl h-auto py-1 font-semibold tracking-tight"
+      />
+    );
+  }
+
+  return (
+    <h1
+      className="group/title -mx-1 flex cursor-text items-start gap-2 rounded px-1 text-2xl font-semibold tracking-tight hover:bg-foreground/[0.03]"
+      onClick={() => {
+        setValue(title);
+        setEditing(true);
+      }}
+    >
+      <span className="min-w-0 flex-1">{title}</span>
+      <Pencil className="mt-1.5 size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/title:opacity-100" />
+    </h1>
+  );
+}
+
+// EditableBody renders the markdown body with a hover "Edit" affordance; an empty body shows
+// an "Add description" button. Editing swaps in the shared MarkdownEditor with save/cancel.
+function EditableBody({
+  body,
+  saving,
+  onSave,
+}: {
+  body: string;
+  saving: boolean;
+  onSave: (body: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const trimmed = body.trim();
+
+  if (editing) {
+    return (
+      <div className="mt-5 space-y-2">
+        <MarkdownEditor value={draft} onChange={setDraft} placeholder="Describe the task…" />
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={saving}
+            onClick={() => {
+              onSave(draft.trim());
+              setEditing(false);
+            }}
+          >
+            {saving && <Loader2 className="animate-spin" />}
+            Save
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const startEdit = () => {
+    setDraft(body);
+    setEditing(true);
+  };
+
+  if (!trimmed) {
+    return (
+      <Button variant="ghost" size="sm" className="mt-4 text-muted-foreground" onClick={startEdit}>
+        <Plus className="size-3.5" /> Add description
+      </Button>
+    );
+  }
+
+  return (
+    <div className="group/body relative mt-5">
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label="Edit description"
+        className="absolute right-0 top-0 size-6 opacity-0 transition-opacity group-hover/body:opacity-100"
+        onClick={startEdit}
+      >
+        <Pencil className="size-3.5" />
+      </Button>
+      <Markdown>{trimmed}</Markdown>
+    </div>
+  );
+}
+
+// ChecksSection shows the task's checks (with run/attest) and toggles into a ChecksEditor for
+// adding, removing, or modifying them. Editing replaces the whole list in one update; retained
+// checks carry their result forward, new checks default to pending server-side.
+function ChecksSection({
+  checks,
+  runs,
+  running,
+  saving,
+  onRun,
+  onAttest,
+  attesting,
+  onSave,
+}: {
+  checks: Check[];
+  runs: Run[];
+  running: boolean;
+  saving: boolean;
+  onRun: () => void;
+  onAttest: (index: number, pass: boolean) => void;
+  attesting: boolean;
+  onSave: (checks: Check[]) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  if (editing) {
+    return (
+      <ChecksEditor
+        checks={checks}
+        saving={saving}
+        onCancel={() => setEditing(false)}
+        onSave={(next) => {
+          onSave(next);
+          setEditing(false);
+        }}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <h3 className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+          Checks
+          {checks.length > 0 && (
+            <span className={cn("tabular-nums", checks.every((c) => c.result === "pass") && "text-success")}>
+              {checks.filter((c) => c.result === "pass").length}/{checks.length}
+            </span>
+          )}
+        </h3>
+        <div className="flex items-center gap-1">
+          {checks.some((c) => c.cmd) && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 gap-1 px-2 text-xs"
+              disabled={running}
+              onClick={onRun}
+            >
+              {running ? <Loader2 className="size-3 animate-spin" /> : <Play className="size-3" />}
+              Run
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 gap-1 px-2 text-xs"
+            onClick={() => setEditing(true)}
+          >
+            <Pencil className="size-3" />
+            Edit
+          </Button>
+        </div>
+      </div>
+      {checks.length > 0 ? (
+        <div className="divide-y overflow-hidden rounded-lg border">
+          {checks.map((c, i) => (
+            <CheckRow
+              key={i}
+              check={c}
+              run={c.cmd ? runs.find((r) => r.cmd === c.cmd) : undefined}
+              running={running}
+              onAttest={(pass) => onAttest(i, pass)}
+              attesting={attesting}
+            />
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">No checks.</p>
+      )}
+    </div>
+  );
+}
+
+// ChecksEditor edits the checks list in a local draft: each row has a description, an optional
+// command (blank = a manual/attested check), and a remove button. Save emits the whole list.
+function ChecksEditor({
+  checks,
+  saving,
+  onCancel,
+  onSave,
+}: {
+  checks: Check[];
+  saving: boolean;
+  onCancel: () => void;
+  onSave: (checks: Check[]) => void;
+}) {
+  const [draft, setDraft] = useState<Check[]>(checks.map((c) => ({ ...c })));
+
+  const setRow = (i: number, patch: Partial<Check>) =>
+    setDraft((d) => d.map((c, j) => (j === i ? { ...c, ...patch } : c)));
+  const removeRow = (i: number) => setDraft((d) => d.filter((_, j) => j !== i));
+  const addRow = () => setDraft((d) => [...d, { desc: "", cmd: "" }]);
+
+  const save = () => {
+    // Drop blank-description rows; a command implies a non-manual check, else it's manual.
+    const cleaned = draft
+      .map((c) => ({ ...c, desc: c.desc.trim(), cmd: (c.cmd ?? "").trim() }))
+      .filter((c) => c.desc)
+      .map((c) => ({ ...c, type: c.cmd ? "" : "manual" }));
+    onSave(cleaned);
+  };
+
+  return (
+    <div className="space-y-2">
+      <h3 className="text-xs font-medium text-muted-foreground">Checks</h3>
+      <div className="space-y-2 rounded-lg border p-2">
+        {draft.length === 0 && (
+          <p className="px-1 py-2 text-xs text-muted-foreground">No checks. Add one below.</p>
+        )}
+        {draft.map((c, i) => (
+          <div key={i} className="space-y-1.5 rounded-md border bg-muted/30 p-2">
+            <div className="flex items-center gap-1.5">
+              <Input
+                value={c.desc}
+                placeholder="What it verifies…"
+                onChange={(e) => setRow(i, { desc: e.target.value })}
+                className="h-7 text-xs"
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 shrink-0 text-destructive"
+                aria-label="Remove check"
+                onClick={() => removeRow(i)}
+              >
+                <X className="size-3.5" />
+              </Button>
+            </div>
+            <Input
+              value={c.cmd ?? ""}
+              placeholder="Command (blank = manual check)"
+              onChange={(e) => setRow(i, { cmd: e.target.value })}
+              className="h-7 font-mono text-xs"
+            />
+          </div>
+        ))}
+        <Button variant="ghost" size="sm" className="h-7 w-full justify-start text-xs" onClick={addRow}>
+          <Plus className="size-3" /> Add check
+        </Button>
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button size="sm" variant="secondary" disabled={saving} onClick={save}>
+          {saving && <Loader2 className="animate-spin" />}
+          Save
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -624,16 +985,43 @@ function LabelsEditor({
   );
 }
 
-type ProvEntry = { who: string; did: string; at: string; text?: string };
+type ProvEntry = { id?: string; who: string; did: string; at: string; text?: string; editedAt?: string };
 
 // ActivityEntry renders one provenance row. Entries that carry a note body are collapsible
-// (collapsed by default, with a one-line preview) so long notes don't flood the log.
-function ActivityEntry({ entry }: { entry: ProvEntry }) {
+// (collapsed by default, with a one-line preview) so long notes don't flood the log. Note
+// entries (did === "note") can be edited or deleted inline; system entries are read-only.
+function ActivityEntry({
+  entry,
+  onEdit,
+  onDelete,
+  saving,
+}: {
+  entry: ProvEntry;
+  onEdit: (text: string) => void;
+  onDelete: () => void;
+  saving: boolean;
+}) {
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const note = entry.text?.trim();
   const preview = note ? (note.split("\n").find((l) => l.trim()) ?? "") : "";
+  const isNote = entry.did === "note";
+
+  const startEdit = () => {
+    setDraft(entry.text ?? "");
+    setEditing(true);
+    setOpen(true);
+  };
+  const save = () => {
+    const v = draft.trim();
+    if (v) onEdit(v);
+    setEditing(false);
+  };
+
   return (
-    <li className="flex gap-2">
+    <li className="group flex gap-2">
       {/* chevron gutter — reserved on every row so avatars/names stay aligned */}
       <button
         aria-label={open ? "Collapse note" : "Expand note"}
@@ -659,28 +1047,88 @@ function ActivityEntry({ entry }: { entry: ProvEntry }) {
         <div
           className={cn(
             "flex min-h-6 items-center gap-1.5",
-            note && "cursor-pointer select-none",
+            note && !editing && "cursor-pointer select-none",
           )}
-          onClick={note ? () => setOpen((o) => !o) : undefined}
+          onClick={note && !editing ? () => setOpen((o) => !o) : undefined}
         >
           <span className="shrink-0 text-sm font-medium">{entry.who}</span>
           <span className="shrink-0 text-xs text-muted-foreground">{entry.did}</span>
+          {entry.editedAt && <span className="shrink-0 text-xs text-muted-foreground/70">(edited)</span>}
           {note && !open && (
             <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground/80">{preview}</span>
           )}
+          {isNote && !editing && (
+            <span className="ml-auto flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6"
+                aria-label="Edit note"
+                disabled={saving}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  startEdit();
+                }}
+              >
+                <Pencil className="size-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6 text-destructive"
+                aria-label="Delete note"
+                disabled={saving}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setConfirmDelete(true);
+                }}
+              >
+                <Trash2 className="size-3.5" />
+              </Button>
+            </span>
+          )}
           <span
-            className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums"
+            className={cn(
+              "shrink-0 text-xs text-muted-foreground tabular-nums",
+              isNote && !editing ? "ml-1.5 group-hover:ml-0" : "ml-auto",
+            )}
             title={new Date(entry.at).toLocaleString()}
           >
             {timeAgo(entry.at)}
           </span>
         </div>
-        {note && open && (
-          <div className="mt-1.5 rounded-lg border bg-muted/40 px-3 py-2">
-            <Markdown>{entry.text!}</Markdown>
+        {editing ? (
+          <div className="mt-1.5 space-y-2">
+            <MarkdownEditor value={draft} onChange={setDraft} placeholder="Edit note…" />
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+              <Button size="sm" variant="secondary" disabled={!draft.trim() || saving} onClick={save}>
+                {saving && <Loader2 className="animate-spin" />}
+                Save
+              </Button>
+            </div>
           </div>
+        ) : (
+          note &&
+          open && (
+            <div className="mt-1.5 rounded-lg border bg-muted/40 px-3 py-2">
+              <Markdown>{entry.text!}</Markdown>
+            </div>
+          )
         )}
       </div>
+
+      <ConfirmDeleteDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete note?"
+        description="This permanently removes the note from the activity log."
+        confirmLabel="Delete note"
+        pending={saving}
+        onConfirm={onDelete}
+      />
     </li>
   );
 }

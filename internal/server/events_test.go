@@ -35,6 +35,38 @@ func TestHubEmitsOnTaskFileWrite(t *testing.T) {
 	}
 }
 
+func TestHubEmitsOnTaskFileRemove(t *testing.T) {
+	root := t.TempDir()
+	tasksDir := filepath.Join(root, ".cairn", "tasks")
+	if err := os.MkdirAll(tasksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(tasksDir, "PROJ-005.md")
+	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	hub := NewHub(10 * time.Millisecond)
+	ch, cancel, err := hub.Subscribe(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cancel()
+
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case e := <-ch:
+		if e.Type != evtTaskChanged || e.ID != "PROJ-005" {
+			t.Fatalf("got %+v, want task-changed PROJ-005", e)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no event after task-file remove")
+	}
+}
+
 func TestHubEmitsOnSessionFileWrite(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, ".cairn", "tasks"), 0o755); err != nil {

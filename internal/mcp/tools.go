@@ -72,13 +72,27 @@ func NewServer(svc *Service) *mcpsdk.Server {
 		})
 
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "update",
-		Description: "Set a task's priority, labels, or parent (epics/sub-tasks). Omitted fields are left unchanged; parent must exist and not create a cycle."},
+		Description: "Edit a task: title, body, checks, priority, labels, or parent (epics/sub-tasks). Omitted fields are left unchanged; title must be non-empty; checks replaces the whole list; parent must exist and not create a cycle."},
 		func(_ context.Context, _ *mcpsdk.CallToolRequest, in updateIn) (*mcpsdk.CallToolResult, taskOut, error) {
-			doc, err := svc.Update(in.ID, UpdateFields{Priority: in.Priority, Labels: in.Labels, Parent: in.Parent})
+			f := UpdateFields{Priority: in.Priority, Labels: in.Labels, Parent: in.Parent, Title: in.Title, Body: in.Body}
+			if in.Checks != nil {
+				checks := fromCheckIn(*in.Checks)
+				f.Checks = &checks
+			}
+			doc, err := svc.Update(in.ID, f)
 			if err != nil {
 				return nil, taskOut{}, err
 			}
 			return nil, svc.view(doc), nil
+		})
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "delete",
+		Description: "Delete a task. Refuses if other tasks name it as parent (children) or list it in deps (dependents); reparent/remove those first."},
+		func(_ context.Context, _ *mcpsdk.CallToolRequest, in idIn) (*mcpsdk.CallToolResult, deleteOut, error) {
+			if err := svc.Delete(in.ID); err != nil {
+				return nil, deleteOut{}, err
+			}
+			return nil, deleteOut{ID: in.ID, Deleted: true}, nil
 		})
 
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "claim",
@@ -115,6 +129,34 @@ func NewServer(svc *Service) *mcpsdk.Server {
 		Description: "Append a free-text provenance entry to a task."},
 		func(_ context.Context, _ *mcpsdk.CallToolRequest, in noteIn) (*mcpsdk.CallToolResult, taskOut, error) {
 			doc, err := svc.Note(in.ID, in.Text)
+			if err != nil {
+				return nil, taskOut{}, err
+			}
+			return nil, svc.view(doc), nil
+		})
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "edit_note",
+		Description: "Edit a note's text in place (marks it editedAt). Anyone may edit any note; only note entries are editable, not system provenance."},
+		func(_ context.Context, _ *mcpsdk.CallToolRequest, in editNoteIn) (*mcpsdk.CallToolResult, taskOut, error) {
+			idx := -1
+			if in.Index != nil {
+				idx = *in.Index
+			}
+			doc, err := svc.EditNote(in.ID, in.Note, idx, in.Text)
+			if err != nil {
+				return nil, taskOut{}, err
+			}
+			return nil, svc.view(doc), nil
+		})
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "delete_note",
+		Description: "Delete a note. Anyone may delete any note; only note entries are deletable, not system provenance."},
+		func(_ context.Context, _ *mcpsdk.CallToolRequest, in deleteNoteIn) (*mcpsdk.CallToolResult, taskOut, error) {
+			idx := -1
+			if in.Index != nil {
+				idx = *in.Index
+			}
+			doc, err := svc.DeleteNote(in.ID, in.Note, idx)
 			if err != nil {
 				return nil, taskOut{}, err
 			}
@@ -250,10 +292,31 @@ type reorderIn struct {
 }
 
 type updateIn struct {
-	ID       string    `json:"id" jsonschema:"the task id"`
-	Priority *string   `json:"priority,omitempty" jsonschema:"set priority (empty clears); omit to leave unchanged"`
-	Labels   *[]string `json:"labels,omitempty" jsonschema:"set labels (empty clears); omit to leave unchanged"`
-	Parent   *string   `json:"parent,omitempty" jsonschema:"set parent id (empty clears); omit to leave unchanged"`
+	ID       string     `json:"id" jsonschema:"the task id"`
+	Priority *string    `json:"priority,omitempty" jsonschema:"set priority (empty clears); omit to leave unchanged"`
+	Labels   *[]string  `json:"labels,omitempty" jsonschema:"set labels (empty clears); omit to leave unchanged"`
+	Parent   *string    `json:"parent,omitempty" jsonschema:"set parent id (empty clears); omit to leave unchanged"`
+	Title    *string    `json:"title,omitempty" jsonschema:"set the title (must be non-empty); omit to leave unchanged"`
+	Body     *string    `json:"body,omitempty" jsonschema:"set the markdown body; omit to leave unchanged"`
+	Checks   *[]checkIn `json:"checks,omitempty" jsonschema:"replace the full checks list (carry result on retained checks); omit to leave unchanged"`
+}
+
+type deleteOut struct {
+	ID      string `json:"id"`
+	Deleted bool   `json:"deleted"`
+}
+
+type editNoteIn struct {
+	ID    string `json:"id" jsonschema:"the task id"`
+	Note  string `json:"note,omitempty" jsonschema:"the note's stable id; omit only for a legacy note addressed by index"`
+	Index *int   `json:"index,omitempty" jsonschema:"0-based provenance index; used only when the note id is absent"`
+	Text  string `json:"text" jsonschema:"the replacement note text"`
+}
+
+type deleteNoteIn struct {
+	ID    string `json:"id" jsonschema:"the task id"`
+	Note  string `json:"note,omitempty" jsonschema:"the note's stable id; omit only for a legacy note addressed by index"`
+	Index *int   `json:"index,omitempty" jsonschema:"0-based provenance index; used only when the note id is absent"`
 }
 
 type checkIn struct {
@@ -262,6 +325,7 @@ type checkIn struct {
 	Type    string `json:"type,omitempty" jsonschema:"set to 'manual' for an attested check"`
 	Cwd     string `json:"cwd,omitempty" jsonschema:"working dir relative to repo root"`
 	Timeout int    `json:"timeout,omitempty" jsonschema:"timeout in seconds"`
+	Result  string `json:"result,omitempty" jsonschema:"carry an existing result (pending|pass|fail) on edit; omit for a new check (defaults pending)"`
 }
 
 type transitionIn struct {
@@ -360,7 +424,11 @@ func fromCheckIn(in []checkIn) []task.Check {
 	}
 	out := make([]task.Check, len(in))
 	for i, c := range in {
-		out[i] = task.Check{Desc: c.Desc, Cmd: c.Cmd, Type: c.Type, Cwd: c.Cwd, Timeout: c.Timeout, Result: "pending"}
+		result := c.Result
+		if result == "" {
+			result = "pending"
+		}
+		out[i] = task.Check{Desc: c.Desc, Cmd: c.Cmd, Type: c.Type, Cwd: c.Cwd, Timeout: c.Timeout, Result: result}
 	}
 	return out
 }

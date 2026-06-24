@@ -351,6 +351,89 @@ func TestUpdateValidationAndGetUpdatedAt(t *testing.T) {
 	}
 }
 
+func TestEditTaskTitleBodyChecks(t *testing.T) {
+	_, h := newServer(t)
+	var st statusResp
+	call(t, h, "POST", "/api/init", `{"prefix":"WEB"}`, &st)
+	var created taskDTO
+	call(t, h, "POST", "/api/tasks", `{"title":"x","body":"old\n"}`, &created)
+
+	var updated taskDTO
+	call(t, h, "POST", "/api/tasks/"+created.ID+"/update",
+		`{"title":"renamed","body":"new\n","checks":[{"desc":"tests","cmd":"go test ./..."}]}`, &updated)
+	if updated.Title != "renamed" || updated.Body != "new\n" || len(updated.Checks) != 1 {
+		t.Fatalf("edit not applied: %+v", updated)
+	}
+
+	// empty title -> 422
+	if code, _ := raw(h, "POST", "/api/tasks/"+created.ID+"/update", `{"title":"  "}`); code != http.StatusUnprocessableEntity {
+		t.Fatalf("empty title status = %d, want 422", code)
+	}
+}
+
+func TestDeleteTaskEndpoint(t *testing.T) {
+	_, h := newServer(t)
+	var st statusResp
+	call(t, h, "POST", "/api/init", `{"prefix":"WEB"}`, &st)
+	var parent, child taskDTO
+	call(t, h, "POST", "/api/tasks", `{"title":"parent"}`, &parent)
+	call(t, h, "POST", "/api/tasks", `{"title":"child","parent":"`+parent.ID+`"}`, &child)
+
+	// parent blocked by child -> 422
+	if code, _ := raw(h, "DELETE", "/api/tasks/"+parent.ID, ""); code != http.StatusUnprocessableEntity {
+		t.Fatalf("delete blocked status = %d, want 422", code)
+	}
+	// child deletes -> 200, then it's gone -> 404
+	if code, b := raw(h, "DELETE", "/api/tasks/"+child.ID, ""); code != http.StatusOK {
+		t.Fatalf("delete child = %d: %s", code, b)
+	}
+	if code, _ := raw(h, "GET", "/api/tasks/"+child.ID, ""); code != http.StatusNotFound {
+		t.Fatalf("get deleted = %d, want 404", code)
+	}
+	// deleting a missing task -> 404
+	if code, _ := raw(h, "DELETE", "/api/tasks/NOPE-1", ""); code != http.StatusNotFound {
+		t.Fatalf("delete missing = %d, want 404", code)
+	}
+}
+
+func TestEditAndDeleteNoteEndpoint(t *testing.T) {
+	_, h := newServer(t)
+	var st statusResp
+	call(t, h, "POST", "/api/init", `{"prefix":"WEB"}`, &st)
+	var created taskDTO
+	call(t, h, "POST", "/api/tasks", `{"title":"x"}`, &created)
+	var noted taskDTO
+	call(t, h, "POST", "/api/tasks/"+created.ID+"/note", `{"text":"first"}`, &noted)
+	noteID := noted.Provenance[len(noted.Provenance)-1].ID
+	if noteID == "" {
+		t.Fatal("note missing id")
+	}
+
+	var edited taskDTO
+	call(t, h, "PATCH", "/api/tasks/"+created.ID+"/notes/"+noteID, `{"text":"edited"}`, &edited)
+	last := edited.Provenance[len(edited.Provenance)-1]
+	if last.Text != "edited" || last.EditedAt == "" {
+		t.Fatalf("note not edited: %+v", last)
+	}
+
+	// editing a system entry (the created entry, index 0) by index -> 422
+	if code, _ := raw(h, "PATCH", "/api/tasks/"+created.ID+"/notes/-?index=0", `{"text":"nope"}`); code != http.StatusUnprocessableEntity {
+		t.Fatalf("edit system entry status = %d, want 422", code)
+	}
+
+	var deleted taskDTO
+	call(t, h, "DELETE", "/api/tasks/"+created.ID+"/notes/"+noteID, "", &deleted)
+	for _, p := range deleted.Provenance {
+		if p.ID == noteID {
+			t.Fatal("note not deleted")
+		}
+	}
+	// deleting a missing note -> 404
+	if code, _ := raw(h, "DELETE", "/api/tasks/"+created.ID+"/notes/n_missing", ""); code != http.StatusNotFound {
+		t.Fatalf("delete missing note = %d, want 404", code)
+	}
+}
+
 func TestReorderEndpoint(t *testing.T) {
 	_, h := newServer(t)
 	var st statusResp

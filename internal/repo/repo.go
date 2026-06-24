@@ -1,6 +1,6 @@
 // Package repo handles initializing a cairn workspace in a project: scaffolding the
 // .cairn/ tree, writing a default config, ensuring the runs dir is gitignored, dropping a
-// generic .cairn/WORKFLOW.md, and pointing AGENTS.md / CLAUDE.md at that workflow.
+// generic .cairn/WORKFLOW.md, and embedding a cairn agent-loop block in AGENTS.md / CLAUDE.md.
 //
 // It is the single source of init logic shared by every front-end — the `cairn init` CLI,
 // the auto-init on `cairn serve`, and the web `POST /api/init` endpoint all call Init, so
@@ -125,9 +125,10 @@ func Init(root, prefix string) error {
 	if err := ensureWorkflow(root); err != nil {
 		return err
 	}
-	// Point the agent docs at the workflow so any tool/human starts there.
+	// Embed the agent-loop block in the agent docs so any tool sees the loop in-context
+	// (harnesses auto-load these files but don't follow the WORKFLOW.md link).
 	for _, doc := range []string{"AGENTS.md", "CLAUDE.md"} {
-		if err := ensureWorkflowRef(root, doc); err != nil {
+		if err := ensureAgentLoop(root, doc); err != nil {
 			return err
 		}
 	}
@@ -163,35 +164,66 @@ func ensureWorkflow(root string) error {
 	return nil
 }
 
-// ensureWorkflowRef makes an agent doc (AGENTS.md / CLAUDE.md) reference the workflow:
-// it appends a section if the file exists without a reference, or creates a stub if absent.
-// Idempotent — a file that already mentions the workflow is left untouched.
-func ensureWorkflowRef(root, name string) error {
+// Markers wrap the cairn-managed block in an agent doc so re-init can refresh it in place
+// without disturbing anything a human wrote around it. They are HTML comments, invisible in
+// rendered Markdown.
+const (
+	agentLoopStart = "<!-- cairn:agent-loop:start -->"
+	agentLoopEnd   = "<!-- cairn:agent-loop:end -->"
+)
+
+// agentLoopBlock is the concise, self-contained onboarding block embedded in AGENTS.md /
+// CLAUDE.md. It lives inline (not just a link) because agent harnesses auto-load these docs
+// but do NOT follow links to .cairn/WORKFLOW.md — so the required loop must be in the file
+// itself. Kept short on purpose: it lands in every agent's context. WORKFLOW.md holds depth.
+const agentLoopBlock = "## Agent loop — required\n\n" +
+	"All work in this repo is tracked in **cairn** (the task graph under `.cairn/`). Drive every\n" +
+	"non-trivial change through a task using cairn's MCP tools — don't edit task files by hand:\n\n" +
+	"1. **identity** — confirm your bound actor.\n" +
+	"2. **find work** — list ready tasks in the initial state.\n" +
+	"3. **begin** — claim a task and open a session (`expected_actor` + a unique `idempotency_key`).\n" +
+	"4. **build + heartbeat** — make the change; report concise progress.\n" +
+	"5. **note** — add a short provenance note at each meaningful decision.\n" +
+	"6. **run_checks** — run the task's checks before handoff.\n" +
+	"7. **finish** — end the session into review with a summary.\n" +
+	"8. **close** — transition to a closed state once reviewed (re-runs checks).\n\n" +
+	"Full lifecycle, gates, and note discipline: [" + workflowPath + "](" + workflowPath + ")."
+
+// ensureAgentLoop embeds (or refreshes) the cairn agent-loop block in an agent doc. If the
+// markers are present it replaces just the content between them; otherwise it appends the
+// block to an existing file, or creates the file with a header. Content outside the markers
+// is never touched, so a project can write its own guidance alongside.
+func ensureAgentLoop(root, name string) error {
 	path := filepath.Join(root, name)
-	section := "## Task workflow\n\nThis repo tracks work with **cairn**. See [" +
-		workflowPath + "](" + workflowPath + ") for the task lifecycle, the agent loop, and " +
-		"note discipline.\n"
+	body := agentLoopStart + "\n" + agentLoopBlock + "\n" + agentLoopEnd
 
 	existing, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("repo: read %s: %w", name, err)
 	}
-	if err == nil {
-		if strings.Contains(string(existing), workflowPath) {
-			return nil
-		}
-		content := string(existing)
-		if len(content) > 0 && !strings.HasSuffix(content, "\n") {
-			content += "\n"
-		}
-		content += "\n" + section
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			return fmt.Errorf("repo: update %s: %w", name, err)
+	if os.IsNotExist(err) {
+		if err := os.WriteFile(path, []byte("# "+name+"\n\n"+body+"\n"), 0o644); err != nil {
+			return fmt.Errorf("repo: write %s: %w", name, err)
 		}
 		return nil
 	}
-	if err := os.WriteFile(path, []byte("# "+name+"\n\n"+section), 0o644); err != nil {
-		return fmt.Errorf("repo: write %s: %w", name, err)
+
+	content := string(existing)
+	if i := strings.Index(content, agentLoopStart); i >= 0 {
+		if j := strings.Index(content, agentLoopEnd); j >= i {
+			content = content[:i] + body + content[j+len(agentLoopEnd):]
+			if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+				return fmt.Errorf("repo: update %s: %w", name, err)
+			}
+			return nil
+		}
+	}
+	if len(content) > 0 && !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	content += "\n" + body + "\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		return fmt.Errorf("repo: update %s: %w", name, err)
 	}
 	return nil
 }

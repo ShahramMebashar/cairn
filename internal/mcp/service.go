@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	"cairn/internal/check"
@@ -194,26 +195,37 @@ func (svc *Service) Create(d store.Draft) (*store.Doc, error) {
 	return svc.store.Create(d, svc.actor, svc.now())
 }
 
-// UpdateFields are the optional organization fields editable after create. A nil pointer
-// leaves a field unchanged; a non-nil pointer sets it (empty clears).
+// ErrEmptyTitle is returned when an edit would set a task's title to blank.
+var ErrEmptyTitle = errors.New("title cannot be empty")
+
+// UpdateFields are the fields editable after create. A nil pointer leaves a field unchanged;
+// a non-nil pointer sets it (empty clears, where clearing is meaningful). Title/Body/Checks
+// edit the task's content; Priority/Labels/Parent are the organization fields.
 type UpdateFields struct {
 	Priority *string
 	Labels   *[]string
 	Parent   *string
+	Title    *string
+	Body     *string
+	Checks   *[]task.Check
 }
 
-// Update sets priority/labels/parent on a task (SPEC §7-style write; appends provenance).
-// Parent changes are validated to exist and not create a cycle.
+// Update edits a task's content and organization fields (SPEC §7-style write; appends one
+// provenance entry). Parent changes are validated to exist and not create a cycle; a Title,
+// when provided, must be non-empty.
 func (svc *Service) Update(id string, f UpdateFields) (*store.Doc, error) {
 	doc, err := svc.store.Get(id)
 	if err != nil {
 		return nil, err
 	}
-	if f.Priority == nil && f.Labels == nil && f.Parent == nil {
+	if f.Priority == nil && f.Labels == nil && f.Parent == nil && f.Title == nil && f.Body == nil && f.Checks == nil {
 		return doc, nil // nothing to change — don't write a spurious provenance entry
 	}
 	if f.Priority != nil && !task.ValidPriority(*f.Priority) {
 		return nil, fmt.Errorf("%w: %q", task.ErrInvalidPriority, *f.Priority)
+	}
+	if f.Title != nil && strings.TrimSpace(*f.Title) == "" {
+		return nil, ErrEmptyTitle
 	}
 	if f.Parent != nil && *f.Parent != "" {
 		all, err := svc.store.List()
@@ -239,11 +251,26 @@ func (svc *Service) Update(id string, f UpdateFields) (*store.Doc, error) {
 	if f.Parent != nil {
 		doc.SetParent(*f.Parent)
 	}
+	if f.Title != nil {
+		doc.SetTitle(*f.Title)
+	}
+	if f.Body != nil {
+		doc.SetBody(*f.Body)
+	}
+	if f.Checks != nil {
+		doc.SetChecks(*f.Checks)
+	}
 	doc.AppendProvenance(svc.actor, "updated", "", svc.now())
 	if err := svc.store.Save(doc); err != nil {
 		return nil, err
 	}
 	return doc, nil
+}
+
+// Delete removes a task. It refuses when other tasks reference it (children via parent,
+// dependents via deps); the caller must reparent/remove those first.
+func (svc *Service) Delete(id string) error {
+	return svc.store.DeleteTask(id, svc.actor)
 }
 
 // Reorder sets a task's board ordering rank. Reordering is cosmetic, so it deliberately
@@ -429,6 +456,40 @@ func (svc *Service) Note(id, text string) (*store.Doc, error) {
 		return nil, err
 	}
 	doc.AppendProvenance(svc.actor, "note", text, svc.now())
+	if err := svc.store.Save(doc); err != nil {
+		return nil, err
+	}
+	return doc, nil
+}
+
+// EditNote edits a note's text in place and marks it editedAt. Anyone may edit any note;
+// only note entries are editable. Address by note id (preferred) or, for a legacy note with
+// no id, by 0-based provenance index (pass noteID=="").
+func (svc *Service) EditNote(id, noteID string, index int, text string) (*store.Doc, error) {
+	doc, err := svc.store.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	if err := doc.EditNote(noteID, index, text, svc.now()); err != nil {
+		return nil, err
+	}
+	if err := svc.store.Save(doc); err != nil {
+		return nil, err
+	}
+	return doc, nil
+}
+
+// DeleteNote removes a note. Anyone may delete any note; only note entries are deletable.
+// Address by note id (preferred) or, for a legacy note with no id, by 0-based provenance
+// index (pass noteID==""). No provenance entry is appended; the deletion leaves no trace.
+func (svc *Service) DeleteNote(id, noteID string, index int) (*store.Doc, error) {
+	doc, err := svc.store.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	if err := doc.DeleteNote(noteID, index); err != nil {
+		return nil, err
+	}
 	if err := svc.store.Save(doc); err != nil {
 		return nil, err
 	}

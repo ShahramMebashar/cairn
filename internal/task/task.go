@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 )
 
 // Check is a single gate-closing verification on a task (SPEC §5, §6).
@@ -81,6 +82,8 @@ var (
 	ErrParentMissing   = errors.New("parent not found")
 	ErrParentCycle     = errors.New("parent cycle")
 	ErrInvalidPriority = errors.New("invalid priority")
+	ErrHasChildren     = errors.New("task has child tasks")
+	ErrHasDependents   = errors.New("task has dependents")
 )
 
 // Priorities are the allowed non-empty priority values (highest first).
@@ -185,6 +188,33 @@ func ValidateParents(all map[string]Task) error {
 			seen[cur] = true
 			cur = p.Parent
 		}
+	}
+	return nil
+}
+
+// ValidateDeletable reports whether the task id may be deleted: it refuses when any other
+// task names it as a parent (children) or lists it in deps (dependents), since deleting would
+// orphan the graph. Offending ids are sorted and listed in the error for a clear message.
+func ValidateDeletable(id string, all map[string]Task) error {
+	var children, dependents []string
+	for tid, t := range all {
+		if tid == id {
+			continue
+		}
+		if t.Parent == id {
+			children = append(children, tid)
+		}
+		if slices.Contains(t.Deps, id) {
+			dependents = append(dependents, tid)
+		}
+	}
+	if len(children) > 0 {
+		slices.Sort(children)
+		return fmt.Errorf("%w: %s blocked by %s", ErrHasChildren, id, strings.Join(children, ", "))
+	}
+	if len(dependents) > 0 {
+		slices.Sort(dependents)
+		return fmt.Errorf("%w: %s blocked by %s", ErrHasDependents, id, strings.Join(dependents, ", "))
 	}
 	return nil
 }
