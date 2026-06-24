@@ -1,19 +1,19 @@
 # Agent sessions
 
 Agent sessions make work observable without turning an agent's self-report into proof.
-Each attempt links a task to an actor, client/model, heartbeat, Git context, cumulative
-usage, and final summary. The task remains the workflow object; the session records who is
-working and what they report.
+Each attempt links a task to an actor, client/model, heartbeat, Git context, and final
+summary. The task remains the workflow object; the session records who is working and what
+they report.
 
 ## Lifecycle
 
 1. Call `identity` and read the connection's bound `actor` and `client`.
 2. Call `begin` with that exact actor as `expected_actor` and a unique
    `idempotency_key`. Cairn claims the task and enters the configured working state.
-3. Call `heartbeat` periodically with concise progress and cumulative usage. Progress is
-   status, not chain-of-thought.
-4. Call `finish` with a useful review summary, final Git head, and cumulative usage; or
-   call `cancel` with a reason.
+3. Call `heartbeat` periodically with concise progress. Progress is status, not
+   chain-of-thought.
+4. Call `finish` with a useful review summary and final Git head; or call `cancel` with a
+   reason.
 5. Run checks and explicitly transition the task closed only after review.
 
 ```jsonc
@@ -35,21 +35,16 @@ working and what they report.
 // heartbeat
 {
   "session": "ses_…",
-  "progress": "Session filters and task-detail supervision panel are implemented.",
-  "usage": { "input_tokens": 24000, "output_tokens": 6200, "tool_calls": 31 }
+  "progress": "Session filters and task-detail supervision panel are implemented."
 }
 
 // finish
 {
   "session": "ses_…",
   "summary": "Added Active, Stalled, and Awaiting review views plus session history in task detail.",
-  "head": "89abcdef",
-  "usage": { "input_tokens": 26000, "output_tokens": 6900, "tool_calls": 36 }
+  "head": "89abcdef"
 }
 ```
-
-Usage counters are cumulative. Cairn merges maxima, so delayed or retried heartbeats cannot
-move a counter backward.
 
 ## Supervision states
 
@@ -63,7 +58,7 @@ Workflow status and execution state are separate:
 
 The web UI exposes these as first-class sidebar views. Task rows carry a compact execution
 signal, and task detail shows progress, heartbeat age, actor/client/model, branch/worktree,
-usage, cancellation reason, and final summary.
+cancellation reason, and final summary.
 
 ## Storage and concurrency
 

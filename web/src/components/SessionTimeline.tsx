@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { Bot, GitBranch, Timer, Wrench } from "lucide-react";
+import { Bot, GitBranch, Timer } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SessionStatus } from "@/components/SessionStatus";
 import { cn, timeAgo } from "@/lib/utils";
-import type { AgentSession, ExecutionState, Usage } from "@/lib/api";
+import type { AgentSession, ExecutionState } from "@/lib/api";
 
 /**
  * Returns the current timestamp and re-renders every `ms` ms when `active` is true.
@@ -59,10 +59,8 @@ function SessionCard({ session }: { session: AgentSession }) {
   // Tick every 30 s so timeAgo() recomputes; only runs when the session is live.
   useNow(30_000, isLive);
 
-  const usage = session.live?.usage ?? session.usage;
   const heartbeat = session.live?.heartbeatAt;
   const detail = session.live?.progress || session.summary || session.cancelReason;
-  const usageSummary = usageText(usage);
 
   return (
     <article className="rounded-lg border bg-background px-3.5 py-3">
@@ -108,12 +106,6 @@ function SessionCard({ session }: { session: AgentSession }) {
             <Timer className="size-3" /> Heartbeat {timeAgo(heartbeat)}
           </span>
         )}
-        {/* Usage — show whenever usage object is present, even if counts are zero. */}
-        {usage !== undefined && usageSummary && (
-          <span className="flex items-center gap-1">
-            <Wrench className="size-3" /> {usageSummary}
-          </span>
-        )}
       </div>
     </article>
   );
@@ -134,12 +126,3 @@ function HealthBadge({ health }: { health: AgentSession["health"] }) {
   );
 }
 
-function usageText(usage?: Usage) {
-  if (!usage) return "";
-  const tokens = (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0);
-  const parts = [];
-  // Always show token count when usage is present (even 0 = session started but no tokens yet).
-  parts.push(`${new Intl.NumberFormat(undefined, { notation: "compact" }).format(tokens)} tokens`);
-  if (usage.toolCalls != null) parts.push(`${usage.toolCalls} tool calls`);
-  return parts.join(" · ");
-}

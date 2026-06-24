@@ -5,7 +5,6 @@ import (
 
 	"cairn/internal/mcp"
 	"cairn/internal/repo"
-	"cairn/internal/session"
 )
 
 type beginSessionReq struct {
@@ -18,26 +17,13 @@ type beginSessionReq struct {
 	IdempotencyKey string `json:"idempotencyKey"`
 }
 
-type usageReq struct {
-	InputTokens  int64 `json:"inputTokens"`
-	OutputTokens int64 `json:"outputTokens"`
-	CachedTokens int64 `json:"cachedTokens"`
-	ToolCalls    int64 `json:"toolCalls"`
-}
-
-func (u usageReq) sessionUsage() session.Usage {
-	return session.Usage{InputTokens: u.InputTokens, OutputTokens: u.OutputTokens, CachedTokens: u.CachedTokens, ToolCalls: u.ToolCalls}
-}
-
 type heartbeatReq struct {
-	Progress string   `json:"progress"`
-	Usage    usageReq `json:"usage"`
+	Progress string `json:"progress"`
 }
 
 type finishSessionReq struct {
-	Summary string   `json:"summary"`
-	Head    string   `json:"head"`
-	Usage   usageReq `json:"usage"`
+	Summary string `json:"summary"`
+	Head    string `json:"head"`
 }
 
 type cancelSessionReq struct {
@@ -123,7 +109,7 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 	var req heartbeatReq
 	decode(r, &req)
 	view, err := svc.Heartbeat(r.Context(), mcp.HeartbeatInput{
-		SessionID: r.PathValue("session"), Progress: req.Progress, Usage: req.Usage.sessionUsage(),
+		SessionID: r.PathValue("session"), Progress: req.Progress,
 	})
 	if err != nil {
 		writeErr(w, err)
@@ -140,7 +126,7 @@ func (s *Server) handleFinishSession(w http.ResponseWriter, r *http.Request) {
 	var req finishSessionReq
 	decode(r, &req)
 	view, err := svc.FinishSession(r.Context(), mcp.FinishSessionInput{
-		SessionID: r.PathValue("session"), Summary: req.Summary, Head: req.Head, Usage: req.Usage.sessionUsage(),
+		SessionID: r.PathValue("session"), Summary: req.Summary, Head: req.Head,
 	})
 	if err != nil {
 		writeErr(w, err)

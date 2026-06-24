@@ -62,14 +62,12 @@ type BeginSessionInput struct {
 type HeartbeatInput struct {
 	SessionID string
 	Progress  string
-	Usage     session.Usage
 }
 
 type FinishSessionInput struct {
 	SessionID string
 	Summary   string
 	Head      string
-	Usage     session.Usage
 }
 
 type CancelSessionInput struct {
@@ -196,7 +194,7 @@ func (svc *Service) BeginSession(ctx context.Context, in BeginSessionInput) (Ses
 	return svc.sessionView(result)
 }
 
-// Heartbeat refreshes ephemeral progress and cumulative usage for an active session.
+// Heartbeat refreshes ephemeral progress for an active session.
 func (svc *Service) Heartbeat(ctx context.Context, in HeartbeatInput) (SessionView, error) {
 	var result *store.SessionDoc
 	err := svc.store.Write(ctx, svc.actor, "heartbeat session", func(tx *store.WriteTx) error {
@@ -221,7 +219,6 @@ func (svc *Service) Heartbeat(ctx context.Context, in HeartbeatInput) (SessionVi
 		if strings.TrimSpace(in.Progress) != "" {
 			live.Progress = strings.TrimSpace(in.Progress)
 		}
-		live.Usage = live.Usage.Merge(in.Usage)
 		if err := tx.WriteLive(*live); err != nil {
 			return err
 		}
@@ -274,15 +271,7 @@ func (svc *Service) FinishSession(ctx context.Context, in FinishSessionInput) (S
 
 		finished := d.Session
 		if d.Session.Status != session.StatusFinished {
-			live, err := tx.ReadLive(d.Session.ID)
-			if err != nil {
-				return err
-			}
-			usage := in.Usage
-			if live != nil {
-				usage = live.Usage.Merge(usage)
-			}
-			finished, err = session.Finish(d.Session, strings.TrimSpace(in.Summary), in.Head, usage, svc.now())
+			finished, err = session.Finish(d.Session, strings.TrimSpace(in.Summary), in.Head, svc.now())
 			if err != nil {
 				return err
 			}

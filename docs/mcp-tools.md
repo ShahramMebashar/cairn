@@ -17,8 +17,8 @@ All write verbs return the full task (the same shape as `get`).
 | [`run_checks`](#run_checks) | W | `id`, `only?` | task |
 | [`note`](#note) | W | `id`, `text` | task |
 | [`begin`](#agent-sessions) | W | task, identity, runtime metadata, retry key | session |
-| [`heartbeat`](#agent-sessions) | W | session, progress, usage | session |
-| [`finish`](#agent-sessions) | W | session, summary, head, usage | session |
+| [`heartbeat`](#agent-sessions) | W | session, progress | session |
+| [`finish`](#agent-sessions) | W | session, summary, head | session |
 | [`cancel`](#agent-sessions) | W | session, reason | session |
 | [`get_session`](#agent-sessions) | R | session | session |
 | [`list_sessions`](#agent-sessions) | R | task/actor/status/health filters | `{ sessions: [...] }` |

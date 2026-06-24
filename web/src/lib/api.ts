@@ -16,19 +16,11 @@ export type Provenance = { who: string; at: string; did: string; text?: string }
 
 export type ExecutionState = "active" | "stalled" | "awaiting_review";
 
-export type Usage = {
-  inputTokens?: number;
-  outputTokens?: number;
-  cachedTokens?: number;
-  toolCalls?: number;
-};
-
 export type SessionLive = {
   session: string;
   heartbeatAt: string;
   progress?: string;
   worktree?: string;
-  usage?: Usage;
 };
 
 export type AgentSession = {
@@ -47,7 +39,6 @@ export type AgentSession = {
   headFinished?: string;
   summary?: string;
   cancelReason?: string;
-  usage?: Usage;
   health: "active" | "stalled" | "finished" | "canceled";
   live?: SessionLive;
 };

@@ -477,9 +477,6 @@ func strNode(s string) *yaml.Node { return &yaml.Node{Kind: yaml.ScalarNode, Tag
 func intNode(i int) *yaml.Node {
 	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: strconv.Itoa(i)}
 }
-func int64Node(i int64) *yaml.Node {
-	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: strconv.FormatInt(i, 10)}
-}
 func floatNode(f float64) *yaml.Node {
 	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!float", Value: strconv.FormatFloat(f, 'f', -1, 64)}
 }

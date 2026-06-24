@@ -20,8 +20,8 @@ done | canceled`; closed: `done`, `canceled`). Transitions are free except two g
 2. **Find work** — list ready tasks in the initial state ("what can I start now").
 3. **Begin** — call `begin` with `expected_actor` and a unique `idempotency_key`. This
    claims the task, enters the working state, and returns the session id.
-4. **Build + heartbeat** — make the change and periodically report concise progress and
-   cumulative usage with `heartbeat` (status, never chain-of-thought).
+4. **Build + heartbeat** — make the change and periodically report concise progress with
+   `heartbeat` (status, never chain-of-thought).
 5. **Note decisions** — add a short provenance note at each meaningful decision.
 6. **Run checks** — run the task's checks before handoff.
 7. **Finish** — call `finish` with a useful review summary. This ends the session and moves

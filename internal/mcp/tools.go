@@ -6,7 +6,6 @@ import (
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"cairn/internal/session"
 	"cairn/internal/store"
 	"cairn/internal/task"
 )
@@ -143,16 +142,16 @@ func NewServer(svc *Service) *mcpsdk.Server {
 		})
 
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "heartbeat",
-		Description: "Refresh an active session with concise progress and cumulative usage."},
+		Description: "Refresh an active session with concise progress."},
 		func(ctx context.Context, _ *mcpsdk.CallToolRequest, in heartbeatIn) (*mcpsdk.CallToolResult, SessionView, error) {
-			out, err := svc.Heartbeat(ctx, HeartbeatInput{SessionID: in.Session, Progress: in.Progress, Usage: in.Usage.toSession()})
+			out, err := svc.Heartbeat(ctx, HeartbeatInput{SessionID: in.Session, Progress: in.Progress})
 			return nil, out, err
 		})
 
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "finish",
 		Description: "Finish an active session with a review summary. This requests review; it never closes the task."},
 		func(ctx context.Context, _ *mcpsdk.CallToolRequest, in finishSessionIn) (*mcpsdk.CallToolResult, SessionView, error) {
-			out, err := svc.FinishSession(ctx, FinishSessionInput{SessionID: in.Session, Summary: in.Summary, Head: in.Head, Usage: in.Usage.toSession()})
+			out, err := svc.FinishSession(ctx, FinishSessionInput{SessionID: in.Session, Summary: in.Summary, Head: in.Head})
 			return nil, out, err
 		})
 
@@ -204,28 +203,15 @@ type beginSessionIn struct {
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"unique retry key for this begin operation"`
 }
 
-type usageIn struct {
-	InputTokens  int64 `json:"input_tokens,omitempty"`
-	OutputTokens int64 `json:"output_tokens,omitempty"`
-	CachedTokens int64 `json:"cached_tokens,omitempty"`
-	ToolCalls    int64 `json:"tool_calls,omitempty"`
-}
-
-func (u usageIn) toSession() session.Usage {
-	return session.Usage{InputTokens: u.InputTokens, OutputTokens: u.OutputTokens, CachedTokens: u.CachedTokens, ToolCalls: u.ToolCalls}
-}
-
 type heartbeatIn struct {
-	Session  string  `json:"session" jsonschema:"session id"`
-	Progress string  `json:"progress,omitempty" jsonschema:"concise current progress, not chain-of-thought"`
-	Usage    usageIn `json:"usage,omitempty"`
+	Session  string `json:"session" jsonschema:"session id"`
+	Progress string `json:"progress,omitempty" jsonschema:"concise current progress, not chain-of-thought"`
 }
 
 type finishSessionIn struct {
-	Session string  `json:"session" jsonschema:"session id"`
-	Summary string  `json:"summary" jsonschema:"review-ready summary of the completed attempt"`
-	Head    string  `json:"head,omitempty" jsonschema:"ending Git HEAD"`
-	Usage   usageIn `json:"usage,omitempty"`
+	Session string `json:"session" jsonschema:"session id"`
+	Summary string `json:"summary" jsonschema:"review-ready summary of the completed attempt"`
+	Head    string `json:"head,omitempty" jsonschema:"ending Git HEAD"`
 }
 
 type cancelSessionIn struct {

@@ -281,7 +281,7 @@ func (d *SessionDoc) Replace(next session.Session) {
 	setOptionalScalar(m, "head_finished", next.HeadFinished)
 	setOptionalScalar(m, "summary", next.Summary)
 	setOptionalScalar(m, "cancel_reason", next.CancelReason)
-	setUsage(m, next.Usage)
+	removeKey(m, "usage") // deprecated: usage tracking removed; purge the key on rewrite
 	d.Session = next
 }
 
@@ -330,25 +330,4 @@ func setOptionalScalar(m *yaml.Node, key, value string) {
 		return
 	}
 	setScalar(m, key, strNode(value))
-}
-
-func setUsage(m *yaml.Node, usage session.Usage) {
-	if usage == (session.Usage{}) {
-		removeKey(m, "usage")
-		return
-	}
-	value := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	if usage.InputTokens > 0 {
-		value.Content = append(value.Content, strNode("input_tokens"), int64Node(usage.InputTokens))
-	}
-	if usage.OutputTokens > 0 {
-		value.Content = append(value.Content, strNode("output_tokens"), int64Node(usage.OutputTokens))
-	}
-	if usage.CachedTokens > 0 {
-		value.Content = append(value.Content, strNode("cached_tokens"), int64Node(usage.CachedTokens))
-	}
-	if usage.ToolCalls > 0 {
-		value.Content = append(value.Content, strNode("tool_calls"), int64Node(usage.ToolCalls))
-	}
-	setScalar(m, "usage", value)
 }

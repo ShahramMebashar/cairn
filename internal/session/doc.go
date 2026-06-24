@@ -38,24 +38,6 @@ var (
 	ErrReasonRequired = errors.New("session cancellation reason is required")
 )
 
-// Usage is cumulative, agent-reported consumption. Zero values mean unknown.
-type Usage struct {
-	InputTokens  int64 `yaml:"input_tokens,omitempty" json:"inputTokens,omitempty"`
-	OutputTokens int64 `yaml:"output_tokens,omitempty" json:"outputTokens,omitempty"`
-	CachedTokens int64 `yaml:"cached_tokens,omitempty" json:"cachedTokens,omitempty"`
-	ToolCalls    int64 `yaml:"tool_calls,omitempty" json:"toolCalls,omitempty"`
-}
-
-// Merge returns cumulative maxima so retried or out-of-order heartbeats cannot reduce usage.
-func (u Usage) Merge(next Usage) Usage {
-	return Usage{
-		InputTokens:  max(u.InputTokens, next.InputTokens),
-		OutputTokens: max(u.OutputTokens, next.OutputTokens),
-		CachedTokens: max(u.CachedTokens, next.CachedTokens),
-		ToolCalls:    max(u.ToolCalls, next.ToolCalls),
-	}
-}
-
 // Session is the durable record of one actor working on one task.
 type Session struct {
 	ID             string     `yaml:"id" json:"id"`
@@ -73,7 +55,6 @@ type Session struct {
 	HeadFinished   string     `yaml:"head_finished,omitempty" json:"headFinished,omitempty"`
 	Summary        string     `yaml:"summary,omitempty" json:"summary,omitempty"`
 	CancelReason   string     `yaml:"cancel_reason,omitempty" json:"cancelReason,omitempty"`
-	Usage          Usage      `yaml:"usage,omitempty" json:"usage,omitempty"`
 }
 
 // Live is ephemeral supervision state. It is local and never committed to Git.
@@ -82,11 +63,10 @@ type Live struct {
 	HeartbeatAt time.Time `json:"heartbeatAt"`
 	Progress    string    `json:"progress,omitempty"`
 	Worktree    string    `json:"worktree,omitempty"`
-	Usage       Usage     `json:"usage,omitempty"`
 }
 
 // Finish returns a terminal copy of s.
-func Finish(s Session, summary, head string, usage Usage, at time.Time) (Session, error) {
+func Finish(s Session, summary, head string, at time.Time) (Session, error) {
 	if s.Status != StatusActive {
 		return Session{}, fmt.Errorf("%w: cannot finish %q", ErrTerminal, s.Status)
 	}
@@ -96,7 +76,6 @@ func Finish(s Session, summary, head string, usage Usage, at time.Time) (Session
 	s.Status = StatusFinished
 	s.Summary = summary
 	s.HeadFinished = head
-	s.Usage = s.Usage.Merge(usage)
 	endedAt := at.UTC()
 	s.EndedAt = &endedAt
 	return s, nil

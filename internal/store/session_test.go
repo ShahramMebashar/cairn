@@ -35,7 +35,6 @@ func TestSessionRoundTripAndLiveState(t *testing.T) {
 		HeartbeatAt: value.StartedAt,
 		Progress:    "starting",
 		Worktree:    s.Root(),
-		Usage:       session.Usage{InputTokens: 12},
 	}
 
 	created, err := s.CreateSession(context.Background(), value.Actor, value, live)
@@ -57,7 +56,7 @@ func TestSessionRoundTripAndLiveState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadLive: %v", err)
 	}
-	if gotLive == nil || gotLive.Progress != "starting" || gotLive.Usage.InputTokens != 12 {
+	if gotLive == nil || gotLive.Progress != "starting" {
 		t.Fatalf("live = %+v", gotLive)
 	}
 
@@ -90,7 +89,7 @@ func TestSessionUpdatePreservesUnknownFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	finished, err := session.Finish(d.Session, "Implemented sessions", "def456", session.Usage{OutputTokens: 9}, value.StartedAt.Add(time.Hour))
+	finished, err := session.Finish(d.Session, "Implemented sessions", "def456", value.StartedAt.Add(time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +136,7 @@ func TestSessionOptimisticConflict(t *testing.T) {
 	}
 	a, _ := s.GetSession(value.ID)
 	b, _ := s.GetSession(value.ID)
-	aFinished, _ := session.Finish(a.Session, "first", "", session.Usage{}, value.StartedAt.Add(time.Hour))
+	aFinished, _ := session.Finish(a.Session, "first", "", value.StartedAt.Add(time.Hour))
 	a.Replace(aFinished)
 	if err := s.SaveSession(context.Background(), value.Actor, a); err != nil {
 		t.Fatal(err)

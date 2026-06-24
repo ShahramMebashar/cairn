@@ -158,24 +158,23 @@ func TestHeartbeatAndFinishSession(t *testing.T) {
 
 	at = at.Add(time.Minute)
 	heartbeat, err := svc.Heartbeat(context.Background(), HeartbeatInput{
-		SessionID: started.ID, Progress: "running tests", Usage: session.Usage{InputTokens: 100, OutputTokens: 20},
+		SessionID: started.ID, Progress: "running tests",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if heartbeat.Live == nil || heartbeat.Live.Progress != "running tests" || heartbeat.Live.Usage.InputTokens != 100 {
+	if heartbeat.Live == nil || heartbeat.Live.Progress != "running tests" {
 		t.Fatalf("heartbeat = %+v", heartbeat)
 	}
 
 	at = at.Add(time.Minute)
 	finished, err := svc.FinishSession(context.Background(), FinishSessionInput{
 		SessionID: started.ID, Summary: "Implemented observable sessions", Head: "def456",
-		Usage: session.Usage{InputTokens: 90, OutputTokens: 30},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if finished.Status != session.StatusFinished || finished.Health != session.HealthFinished || finished.Usage.InputTokens != 100 || finished.Usage.OutputTokens != 30 {
+	if finished.Status != session.StatusFinished || finished.Health != session.HealthFinished {
 		t.Fatalf("finished = %+v", finished)
 	}
 	if live, _ := svc.store.ReadLive(started.ID); live != nil {

@@ -32,7 +32,7 @@ func TestFinish(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := Finish(tt.session, tt.summary, "abc123", Usage{InputTokens: 12}, at)
+			got, err := Finish(tt.session, tt.summary, "abc123", at)
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("Finish error = %v, want %v", err, tt.wantErr)
 			}
@@ -91,13 +91,6 @@ func TestDeriveHealthZeroStaleAfter(t *testing.T) {
 	}
 	if got := DeriveHealth(s, nil, s.StartedAt.Add(time.Nanosecond), 0); got != HealthStalled {
 		t.Fatalf("DeriveHealth after start = %q, want stalled", got)
-	}
-}
-
-func TestUsageMergeIsMonotonic(t *testing.T) {
-	got := (Usage{InputTokens: 10, OutputTokens: 8}).Merge(Usage{InputTokens: 9, OutputTokens: 12})
-	if got.InputTokens != 10 || got.OutputTokens != 12 {
-		t.Fatalf("Merge = %+v", got)
 	}
 }
 

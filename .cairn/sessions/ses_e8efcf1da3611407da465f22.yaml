@@ -1,0 +1,12 @@
+id: ses_e8efcf1da3611407da465f22
+task: PROJ-047
+attempt: att_e8efcf1da3611407da465f22
+actor: agent:claude
+client: claude
+model: claude-opus-4-8
+status: finished
+idempotency_key: PROJ-047-remove-usage-v1
+started_at: 2026-06-24T17:35:12.418223Z
+branch: main
+ended_at: 2026-06-24T17:43:15Z
+summary: 'Removed session usage/token tracking entirely, per decision that an unfed field is worse than no field. Deleted the Usage type, Session/Live usage fields, the Finish usage param, MCP usageIn + Heartbeat/Finish usage args, HTTP usageReq, and the web Usage type + token rendering; store now purges the deprecated `usage:` key on any session rewrite. Docs (agent-sessions, mcp-tools, the init workflow template + .cairn/WORKFLOW.md) updated; dated design specs left as historical record. go test ./... + pnpm build green, gofmt/vet clean, and a grep check enforces no usage symbol remains (bar the one intentional purge line). Review focus: confirm dropping the field from the session schema is acceptable (it was optional/omitempty, so no breakage) and whether the 3 historical .cairn/sessions/*.yaml should have their now-ignored usage keys stripped. Heads-up: this session''s cairn binary still predates PROJ-045/046/047 — rebuild + reconnect for any of these to be live (and to stop the binary re-writing usage onto session files).'
