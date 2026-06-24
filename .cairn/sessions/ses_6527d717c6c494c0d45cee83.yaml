@@ -1,0 +1,12 @@
+id: ses_6527d717c6c494c0d45cee83
+task: PROJ-048
+attempt: att_6527d717c6c494c0d45cee83
+actor: agent:claude
+client: claude
+model: claude-opus-4-8
+status: finished
+idempotency_key: PROJ-048-checks-ui-v1
+started_at: 2026-06-24T17:47:35.328662Z
+branch: main
+ended_at: 2026-06-24T17:49:13Z
+summary: Reworked the task checks panel (web/src/pages/TaskDetail.tsx) from bare text into a scannable, Linear-style group. Bordered/divided list; each row leads with a status icon (✓ success / ✗ destructive / hollow pending / spinner running) and ends with a soft status pill; header shows an n/n passing summary and an outline Run button. Collapsible logs + manual attest preserved, all via existing design tokens. pnpm build green. The manual "design review" check is intentionally left pending — it's yours to attest after a visual look (open a task with checks, e.g. PROJ-047, in the web UI). Once you're happy, attest it and close to done.

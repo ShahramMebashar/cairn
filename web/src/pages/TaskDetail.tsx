@@ -3,6 +3,9 @@ import {
   ArrowLeft,
   Check as CheckMark,
   ChevronRight,
+  Circle,
+  CircleCheck,
+  CircleX,
   CornerLeftUp,
   Loader2,
   Play,
@@ -338,40 +341,50 @@ export function TaskDetail({
             )}
 
             {task.checks && task.checks.length > 0 && (
-              <Prop
-                label="Checks"
-                action={
-                  (task.checks ?? []).some((c) => c.cmd) ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                    Checks
+                    <span
+                      className={cn(
+                        "tabular-nums",
+                        task.checks.every((c) => c.result === "pass") && "text-success",
+                      )}
+                    >
+                      {task.checks.filter((c) => c.result === "pass").length}/{task.checks.length}
+                    </span>
+                  </h3>
+                  {(task.checks ?? []).some((c) => c.cmd) && (
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      className="h-6 px-2 text-xs"
+                      className="h-6 gap-1 px-2 text-xs"
                       disabled={runChecks.isPending}
                       onClick={() => runChecks.mutate({ id: task.id })}
                     >
                       {runChecks.isPending ? (
-                        <Loader2 className="animate-spin" />
+                        <Loader2 className="size-3 animate-spin" />
                       ) : (
                         <Play className="size-3" />
                       )}
                       Run
                     </Button>
-                  ) : null
-                }
-              >
-                <div className="space-y-1.5">
+                  )}
+                </div>
+                <div className="divide-y overflow-hidden rounded-lg border">
                   {task.checks.map((c, i) => (
                     <CheckRow
                       key={i}
                       check={c}
                       // Latest run for this check, matched by command (runs are newest-first).
                       run={c.cmd ? (runs ?? []).find((r) => r.cmd === c.cmd) : undefined}
+                      running={runChecks.isPending}
                       onAttest={(pass) => attest.mutate({ id: task.id, index: i, pass })}
                       attesting={attest.isPending}
                     />
                   ))}
                 </div>
-              </Prop>
+              </div>
             )}
             </aside>
           </ResizablePanel>
@@ -401,87 +414,110 @@ function Prop({
   );
 }
 
+// checkStatus maps a check's result (and whether a run is in flight) to its icon and pill
+// styling. The left-edge icon makes the column scannable; the pill labels the state.
+function checkStatus(result: string | undefined, running: boolean) {
+  if (running) {
+    return { Icon: Loader2, label: "running", icon: "animate-spin text-muted-foreground", pill: "bg-muted text-muted-foreground" };
+  }
+  switch (result) {
+    case "pass":
+      return { Icon: CircleCheck, label: "pass", icon: "text-success", pill: "bg-success/10 text-success" };
+    case "fail":
+      return { Icon: CircleX, label: "fail", icon: "text-destructive", pill: "bg-destructive/10 text-destructive" };
+    default:
+      return { Icon: Circle, label: "pending", icon: "text-muted-foreground/50", pill: "bg-muted text-muted-foreground" };
+  }
+}
+
+function StatusPill({ className, children }: { className: string; children: React.ReactNode }) {
+  return (
+    <span className={cn("shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium", className)}>
+      {children}
+    </span>
+  );
+}
+
 function CheckRow({
   check,
   run,
+  running,
   onAttest,
   attesting,
 }: {
   check: Check;
   run?: Run;
+  running: boolean;
   onAttest: (pass: boolean) => void;
   attesting: boolean;
 }) {
-  const color =
-    check.result === "pass"
-      ? "text-success"
-      : check.result === "fail"
-        ? "text-destructive"
-        : "text-muted-foreground";
   const isManual = !check.cmd;
   const pending = (check.result ?? "pending") === "pending";
+  const meta = checkStatus(check.result, running && !isManual);
+  const expandable = !isManual && !!run;
 
-  const head = (
+  const lead = (
     <>
-      <span className="min-w-0 truncate">{check.desc}</span>
-      <span className={cn("shrink-0 text-xs font-medium", color)}>{check.result ?? "pending"}</span>
+      <meta.Icon className={cn("size-4 shrink-0", meta.icon)} />
+      <span className="min-w-0 flex-1 truncate text-sm">{check.desc}</span>
     </>
   );
 
-  // Manual + pending: offer attest pass/fail (no command to run).
-  if (isManual) {
+  // Manual + pending: offer inline attest pass/fail (no command to run).
+  if (isManual && pending) {
     return (
-      <div className="flex items-center justify-between gap-2 text-sm">
-        {head}
-        {pending && (
-          <span className="flex shrink-0 items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-6 text-success"
-              aria-label="Attest pass"
-              disabled={attesting}
-              onClick={() => onAttest(true)}
-            >
-              {attesting ? <Loader2 className="animate-spin" /> : <CheckMark className="size-3.5" />}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-6 text-destructive"
-              aria-label="Attest fail"
-              disabled={attesting}
-              onClick={() => onAttest(false)}
-            >
-              <X className="size-3.5" />
-            </Button>
-          </span>
-        )}
+      <div className="flex items-center gap-2 px-3 py-2">
+        {lead}
+        <span className="flex shrink-0 items-center gap-0.5">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6 text-success"
+            aria-label="Attest pass"
+            disabled={attesting}
+            onClick={() => onAttest(true)}
+          >
+            {attesting ? <Loader2 className="animate-spin" /> : <CheckMark className="size-3.5" />}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6 text-destructive"
+            aria-label="Attest fail"
+            disabled={attesting}
+            onClick={() => onAttest(false)}
+          >
+            <X className="size-3.5" />
+          </Button>
+        </span>
       </div>
     );
   }
 
-  // Command check with no run yet: plain row.
-  if (!run) {
-    return <div className="flex items-center justify-between gap-2 text-sm">{head}</div>;
+  // Command check with captured output: the whole row toggles an inline log panel.
+  if (expandable) {
+    return (
+      <Collapsible>
+        <CollapsibleTrigger className="group flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-foreground/[0.03]">
+          {lead}
+          <StatusPill className={meta.pill}>{meta.label}</StatusPill>
+          <ChevronRight className="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="border-t bg-muted/30 px-3 py-2">
+            <LogView run={run} />
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    );
   }
 
-  // Command check with captured output: expandable log panel.
+  // Manual-passed/failed, or a command check not yet run: a plain status row.
   return (
-    <Collapsible>
-      <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 text-left text-sm">
-        <span className="flex min-w-0 items-center gap-1">
-          <ChevronRight className="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
-          <span className="min-w-0 truncate">{check.desc}</span>
-        </span>
-        <span className={cn("shrink-0 text-xs font-medium", color)}>
-          {check.result ?? "pending"}
-        </span>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="mt-1.5">
-        <LogView run={run} />
-      </CollapsibleContent>
-    </Collapsible>
+    <div className="flex items-center gap-2 px-3 py-2">
+      {lead}
+      <StatusPill className={meta.pill}>{meta.label}</StatusPill>
+    </div>
   );
 }
 
