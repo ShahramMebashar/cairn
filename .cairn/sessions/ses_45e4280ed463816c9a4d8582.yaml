@@ -4,7 +4,15 @@ attempt: att_45e4280ed463816c9a4d8582
 actor: agent:claude
 client: claude
 model: claude-opus-4-8
-status: active
+status: finished
 idempotency_key: begin-agentloop-embed-001
 started_at: 2026-06-24T20:20:21.878027Z
 branch: main
+ended_at: 2026-06-24T20:21:49Z
+summary: |-
+  repo.Init now embeds a cairn-managed agent-loop block inline in AGENTS.md/CLAUDE.md instead of just linking to WORKFLOW.md — fixing agents skipping the workflow (harnesses auto-load these docs but don't follow links).
+
+  - internal/repo/repo.go: ensureWorkflowRef → ensureAgentLoop. Marker-wrapped (<!-- cairn:agent-loop:start/end -->) concise "Agent loop — required" block: the 8-step loop (identity → find → begin → heartbeat → note → run_checks → finish → close) + a link to .cairn/WORKFLOW.md for depth. Re-init replaces only the content between markers (in-place refresh, so the block can evolve with cairn); appends once if markers absent; creates the file with a header if missing. Content outside the markers is never touched.
+  - internal/repo/repo_test.go: idempotency test now asserts exactly one marker pair after two inits and that the block is present.
+
+  Verified: go test ./... green; rendered AGENTS.md via `cairn init` in a temp dir looks correct. Rebuilt bin/cairn — the running MCP/web server must restart for future inits to use it. Review focus: wording/length of the embedded block (it lands in every agent's auto-loaded context).
