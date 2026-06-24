@@ -52,6 +52,7 @@ type Rules struct {
 	Initial string   // the state new tasks start in
 	Closed  []string // states considered "closed" (subset of States)
 	States  []string // all valid states; empty disables target-state validation
+	Review  string   // the review/handoff state, or ""; entry is gated on command checks
 }
 
 // IsClosed reports whether status is one of the closed states.
@@ -108,8 +109,13 @@ func Ready(t Task, all map[string]Task, r Rules) bool {
 // sentinel. The two gates (SPEC §5):
 //
 //  1. Deps gate  — cannot LEAVE the initial state unless all deps are closed.
-//  2. Checks gate — cannot ENTER a closed state unless all checks pass (zero checks
-//     passes vacuously; manual checks count until attested).
+//  2. Checks gate — cannot ENTER a closed state unless ALL checks pass; cannot ENTER the
+//     review state unless all COMMAND checks pass (manual checks are attested during
+//     review, per SPEC §6, so they're exempt at review entry). Zero checks passes
+//     vacuously.
+//
+// Gating review entry is what makes handoff un-skippable: an agent cannot finish a session
+// into review while its command checks are still pending or failing.
 //
 // All other transitions are free, including reopening a closed task. Both gates can
 // apply at once (e.g. backlog -> done directly); the deps gate is reported first.
@@ -123,9 +129,15 @@ func CanTransition(t Task, to string, all map[string]Task, r Rules) error {
 		return fmt.Errorf("%w: %s cannot leave %q with unclosed deps", ErrDepsNotClosed, t.ID, r.Initial)
 	}
 
-	// Checks gate: triggered on entry into any closed state.
-	if r.IsClosed(to) {
+	// Checks gate: closed entry requires every check; review entry requires every command
+	// check (manual checks are attested later, during review).
+	gatedClosed := r.IsClosed(to)
+	gatedReview := r.Review != "" && to == r.Review && !gatedClosed
+	if gatedClosed || gatedReview {
 		for i, c := range t.Checks {
+			if gatedReview && c.Cmd == "" {
+				continue // manual check: attested during review, not before entry
+			}
 			if !c.Passed() {
 				return fmt.Errorf("%w: check %d (%q) is %q", ErrChecksNotPassed, i, c.Desc, c.Result)
 			}

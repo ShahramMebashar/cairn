@@ -27,7 +27,7 @@ All write verbs return the full task (the same shape as `get`).
 
 ```json
 {
-  "id": "PROJ-002",
+  "id": "PROJ-01j8x2k7q7f3az",
   "title": "Add idempotency keys",
   "status": "in_progress",
   "assignee": "agent:claude-1",
@@ -74,8 +74,9 @@ Full task including `body`, `checks` (+results), and `provenance`.
 
 ## create
 
-The engine assigns the `id` (`prefix` + counter) and sets `status` to the configured
-`initial`. Deps must already exist or the call is rejected (no dangling graph).
+The engine assigns the `id` (a time-ordered, collision-resistant `prefix`-`<base32>` token)
+and sets `status` to the configured `initial`. Deps must already exist or the call is rejected
+(no dangling graph).
 
 | Arg | Type | Meaning |
 |---|---|---|

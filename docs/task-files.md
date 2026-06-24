@@ -58,7 +58,7 @@ Prose intent and constraints go here.
 
 | Field | Owner | Notes |
 |---|---|---|
-| `id` | engine | assigned at create (`prefix`+counter); never reused |
+| `id` | engine | assigned at create: `prefix` + time-ordered base32 token; sorts by creation time; never reused |
 | `title` | caller | free text |
 | `status` | engine | one of `config.states` |
 | `assignee` | engine | set by `claim` (`human:<name>` / `agent:<name>`) |
@@ -76,7 +76,7 @@ never a struct round-trip.)
 
 ```yaml
 prefix: PROJ                 # id prefix
-counter: 2                   # last assigned number; engine increments on create
+counter: 2                   # deprecated, unused; retained so existing configs still parse
 states: [backlog, in_progress, in_review, done, canceled]
 closed: [done, canceled]     # subset of states considered "closed"
 initial: backlog             # state new tasks start in
@@ -85,8 +85,9 @@ check_timeout_default: 120   # seconds, when a check omits timeout
 
 - `states` are free strings you define — there is no hardcoded status enum.
 - `closed` drives deps-readiness and the checks gate.
-- `counter` is the monotonic id source; the engine increments it under the repository-wide
-  advisory write lock.
+- Ids are minted at create as `prefix` + a time-ordered, collision-resistant base32 token, so
+  concurrent creators in separate clones never collide — no shared counter, no merge conflict.
+  `counter` is retained only for backward-compatible parsing and is no longer incremented.
 
 ## Dependencies
 

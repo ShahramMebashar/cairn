@@ -4,12 +4,16 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 	"time"
 
 	"cairn/internal/store"
 	"cairn/internal/task"
 )
+
+// taskIDRe matches the time-ordered ids minted by store.mintTaskID (prefix + 16 base32 chars).
+var taskIDRe = regexp.MustCompile(`^PROJ-[0-9a-z]{16}$`)
 
 func service(t *testing.T, actor string) *Service {
 	t.Helper()
@@ -31,10 +35,10 @@ func TestCreateAndGet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if d.Task.ID != "PROJ-001" || d.Task.Status != "backlog" {
+	if !taskIDRe.MatchString(d.Task.ID) || d.Task.Status != "backlog" {
 		t.Fatalf("bad created task: %+v", d.Task)
 	}
-	got, err := svc.Get("PROJ-001")
+	got, err := svc.Get(d.Task.ID)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -114,6 +118,30 @@ func TestTransitionRefusesOnFailingCheck(t *testing.T) {
 	}
 	if got.Task.Checks[0].Result != "fail" {
 		t.Fatalf("check result = %q, want fail (recorded)", got.Task.Checks[0].Result)
+	}
+}
+
+// TestTransitionDoesNotTrustStaleStoredPass is the #2 guard: a recorded `pass` is never
+// trusted at the close gate — the cmd checks are re-run fresh. Here the file claims `pass`
+// but the command now fails, so the close must be refused and the result corrected to fail.
+func TestTransitionDoesNotTrustStaleStoredPass(t *testing.T) {
+	svc := service(t, "agent:a")
+	// Seed a task whose stored check result lies: result=pass on a command that exits 1.
+	stale := "---\nid: STALE-1\ntitle: stale pass\nstatus: in_review\nchecks:\n  - desc: build\n    cmd: exit 1\n    result: pass\nprovenance:\n  - {who: agent:a, at: 2026-06-21T10:00:00Z, did: created}\n---\nbody\n"
+	path := filepath.Join(svc.store.Root(), ".cairn", "tasks", "STALE-1.md")
+	if err := os.WriteFile(path, []byte(stale), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.Transition("STALE-1", "done"); !errors.Is(err, task.ErrChecksNotPassed) {
+		t.Fatalf("transition = %v, want ErrChecksNotPassed (stale pass must be re-verified)", err)
+	}
+	got, _ := svc.Get("STALE-1")
+	if got.Task.Status == "done" {
+		t.Fatal("task closed on a stale stored pass")
+	}
+	if got.Task.Checks[0].Result != "fail" {
+		t.Fatalf("check result = %q, want fail (re-run corrected the stale pass)", got.Task.Checks[0].Result)
 	}
 }
 

@@ -1,0 +1,12 @@
+id: ses_fe1f32ee5d98a71fdbd02cef
+task: PROJ-045
+attempt: att_fe1f32ee5d98a71fdbd02cef
+actor: agent:claude
+client: claude
+model: claude-opus-4-8
+status: finished
+idempotency_key: PROJ-045-time-ordered-ids-v1
+started_at: 2026-06-24T16:27:10.891722Z
+branch: main
+ended_at: 2026-06-24T16:38:18Z
+summary: 'Replaced the sequential counter with time-ordered, collision-free task ids. mintTaskID (internal/store/id.go) emits "<prefix>-<base32 UnixMilli><crypto/rand tail>"; Create no longer writes config.yaml and guards uniqueness with an existence-check retry, so two clones creating tasks offline never conflict on the id, the counter line, or the filename. config.NewID removed (Counter kept, deprecated). Web effectiveRank decodes the time prefix; legacy PROJ-0NN ids still sort first. SSE create signal is now task-changed (the web invalidates the list on any event); SSE test updated to cover the list path. Docs/spec/FRICTION updated. go test ./... and web pnpm build both pass; gofmt + go vet clean. Review focus: id length/entropy (10+6 base32), the effectiveRank decode for mixed old/new ids, and the SSE event-semantics change. Heads-up: the session''s cairn binary predates this change, so rebuild + reconnect before the new ids mint live.'

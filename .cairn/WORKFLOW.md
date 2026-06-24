@@ -23,9 +23,12 @@ done | canceled`; closed: `done`, `canceled`). Transitions are free except two g
 4. **Build + heartbeat** — make the change and periodically report concise progress and
    cumulative usage with `heartbeat` (status, never chain-of-thought).
 5. **Note decisions** — add a short provenance note at each meaningful decision.
-6. **Run checks** — run the task's checks before handoff.
+6. **Run checks** — run the task's checks with `run_checks` before handoff. This is now
+   **enforced**, not advisory: `finish` refuses if any command check is still pending or
+   failing (manual checks are exempt — they're attested during review).
 7. **Finish** — call `finish` with a useful review summary. This ends the session and moves
-   the task to review; it does **not** claim the work is verified or close the task.
+   the task to review; it does **not** claim the work is verified or close the task. Closing
+   to a done state re-runs the command checks fresh, so a stale `pass` can't slip through.
 8. **Close after review** — transition to a closed state; the checks gate runs and refuses
    on failure.
 
@@ -55,7 +58,8 @@ if every entry restates the obvious, you over-noted.
 - **Checks** — prefer real commands that actually gate quality; use a `manual` check for what
   a command can't verify. A task carrying a pending manual check parks until it's attested.
 - **Deps** — wire real ordering so `ready` means it. Deps must already exist at create time.
-- Ids are engine-assigned and **monotonic** — deleting a task file never recycles its id.
+- Ids are engine-assigned, **time-ordered, and collision-free** — they sort by creation and
+  never collide across clones, so deleting a task file never recycles its id.
 
 ### Body style
 

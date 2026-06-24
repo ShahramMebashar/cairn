@@ -62,23 +62,6 @@ func TestSaveRoundTrips(t *testing.T) {
 	}
 }
 
-func TestNewID(t *testing.T) {
-	c, err := Load(writeConfig(t, sample))
-	if err != nil {
-		t.Fatal(err)
-	}
-	id, next := c.NewID()
-	if id != "PROJ-003" {
-		t.Fatalf("id = %q, want PROJ-003", id)
-	}
-	if next.Counter != 3 {
-		t.Fatalf("counter = %d, want 3", next.Counter)
-	}
-	if c.Counter != 2 {
-		t.Fatalf("NewID mutated the receiver: counter = %d", c.Counter)
-	}
-}
-
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		name string

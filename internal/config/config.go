@@ -23,7 +23,7 @@ var ErrInvalidConfig = errors.New("invalid config")
 // no hardcoded status enum. closed must be a subset of states; initial must be a state.
 type Config struct {
 	Prefix              string   `yaml:"prefix"`
-	Counter             int      `yaml:"counter"`
+	Counter             int      `yaml:"counter"` // deprecated: ids are now time-ordered (store.mintTaskID); kept only so existing config.yaml still parses.
 	States              []string `yaml:"states"`
 	Closed              []string `yaml:"closed"`
 	Initial             string   `yaml:"initial"`
@@ -122,15 +122,6 @@ func (c Config) Validate() error {
 
 func (c Config) isState(s string) bool {
 	return slices.Contains(c.States, s)
-}
-
-// NewID mints the next task id and returns a copy of the config with the counter
-// advanced. It is pure — the caller persists `next` (under the repository lock, SPEC §3) so
-// the monotonic counter is never lost or reused.
-func (c Config) NewID() (id string, next Config) {
-	next = c
-	next.Counter = c.Counter + 1
-	return fmt.Sprintf("%s-%03d", c.Prefix, next.Counter), next
 }
 
 // CheckTimeout resolves a per-check timeout in seconds to a duration, falling back to

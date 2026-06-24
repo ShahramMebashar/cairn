@@ -390,8 +390,9 @@ func (s *Store) checkVersion(d *Doc) error {
 	return nil
 }
 
-// Create mints the next id under the repository lock, writes a new task file in the initial state
-// with a `created` provenance entry, and persists the advanced counter (SPEC §3, §7).
+// Create mints a time-ordered, collision-resistant id under the repository lock and writes a
+// new task file in the initial state with a `created` provenance entry (SPEC §3, §7). No
+// shared counter is touched, so concurrent creators in separate clones never collide.
 // Draft is the caller-supplied content for a new task. Id and status are engine-assigned.
 type Draft struct {
 	Title    string
@@ -411,7 +412,24 @@ func (s *Store) Create(draft Draft, actor string, at time.Time) (*Doc, error) {
 		if err != nil {
 			return err
 		}
-		id, next := cfg.NewID()
+		// Mint a time-ordered, collision-resistant id (SPEC §3). No counter is read or
+		// written, so concurrent creates in separate clones never collide. The existence
+		// check is a belt-and-suspenders guard against the astronomically unlikely case of
+		// a same-millisecond, same-random clash within this repo.
+		var id string
+		for range 5 {
+			candidate, err := mintTaskID(cfg.Prefix, at)
+			if err != nil {
+				return err
+			}
+			if _, statErr := os.Stat(s.taskPath(candidate)); os.IsNotExist(statErr) {
+				id = candidate
+				break
+			}
+		}
+		if id == "" {
+			return fmt.Errorf("store: could not mint a unique task id after 5 attempts")
+		}
 
 		d := &Doc{Body: draft.Body}
 		d.node = yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}}
@@ -445,9 +463,6 @@ func (s *Store) Create(draft Draft, actor string, at time.Time) (*Doc, error) {
 			return err
 		}
 		if err := tx.SaveTask(d); err != nil {
-			return err
-		}
-		if err := config.Save(s.configPath(), next); err != nil {
 			return err
 		}
 		created = d

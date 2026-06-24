@@ -36,9 +36,13 @@ func TestSSEStreamsTaskChangeEvent(t *testing.T) {
 	}
 
 	// Headers are sent only after the handler has subscribed, so the watcher is live now.
-	// Create a task via the API (a separate codepath writing the same store) to trigger it.
-	var created taskDTO
-	call(t, s.Handler(), "POST", "/api/tasks?path="+root, `{"title":"realtime"}`, &created)
+	// Create two tasks within one debounce window: touching multiple task files coalesces
+	// into a list-level tasks-changed (a single create is the more precise task-changed,
+	// covered below). Creates no longer bump a config counter, so the list signal now comes
+	// from the task files themselves.
+	var a, b taskDTO
+	call(t, s.Handler(), "POST", "/api/tasks?path="+root, `{"title":"realtime one"}`, &a)
+	call(t, s.Handler(), "POST", "/api/tasks?path="+root, `{"title":"realtime two"}`, &b)
 
 	line := readSSEData(t, resp.Body)
 	if !strings.Contains(line, "tasks-changed") {

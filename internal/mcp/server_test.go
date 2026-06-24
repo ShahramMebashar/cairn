@@ -75,16 +75,16 @@ func TestServerEndToEnd(t *testing.T) {
 		"title":  "ship it",
 		"checks": []map[string]any{{"desc": "tests", "cmd": "exit 0"}},
 	})
-	if created.ID != "PROJ-001" {
-		t.Fatalf("create id = %q", created.ID)
+	if !taskIDRe.MatchString(created.ID) {
+		t.Fatalf("create id = %q, want match %s", created.ID, taskIDRe)
 	}
 
-	claimed := call("claim", map[string]any{"id": "PROJ-001"})
+	claimed := call("claim", map[string]any{"id": created.ID})
 	if claimed.Assignee != "agent:claude-1" {
 		t.Fatalf("assignee = %q", claimed.Assignee)
 	}
 
-	done := call("transition", map[string]any{"id": "PROJ-001", "to": "done"})
+	done := call("transition", map[string]any{"id": created.ID, "to": "done"})
 	if done.Status != "done" {
 		t.Fatalf("status = %q, want done", done.Status)
 	}

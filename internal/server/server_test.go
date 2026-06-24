@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -13,6 +14,9 @@ import (
 	"cairn/internal/repo"
 	"cairn/internal/session"
 )
+
+// webIDRe matches the time-ordered ids minted by the store (prefix + 16 base32 chars).
+var webIDRe = regexp.MustCompile(`^WEB-[0-9a-z]{16}$`)
 
 type runResp struct {
 	Runs []struct {
@@ -118,7 +122,7 @@ func TestTaskLifecycleOverHTTP(t *testing.T) {
 	// Create with a passing check.
 	var created taskDTO
 	call(t, h, "POST", "/api/tasks", `{"title":"ship it","checks":[{"desc":"t","cmd":"exit 0"}]}`, &created)
-	if created.ID != "WEB-001" || created.Status != "backlog" {
+	if !webIDRe.MatchString(created.ID) || created.Status != "backlog" {
 		t.Fatalf("created: %+v", created)
 	}
 
@@ -133,14 +137,14 @@ func TestTaskLifecycleOverHTTP(t *testing.T) {
 
 	// Claim.
 	var claimed taskDTO
-	call(t, h, "POST", "/api/tasks/WEB-001/claim", "", &claimed)
+	call(t, h, "POST", "/api/tasks/"+created.ID+"/claim", "", &claimed)
 	if claimed.Assignee != "human:test" {
 		t.Fatalf("assignee: %q", claimed.Assignee)
 	}
 
 	// Transition to done auto-runs the passing check and closes.
 	var done taskDTO
-	call(t, h, "POST", "/api/tasks/WEB-001/transition", `{"to":"done"}`, &done)
+	call(t, h, "POST", "/api/tasks/"+created.ID+"/transition", `{"to":"done"}`, &done)
 	if done.Status != "done" || done.Checks[0].Result != "pass" {
 		t.Fatalf("transition: %+v", done)
 	}
@@ -277,7 +281,7 @@ func TestListIncludesUpdatedAt(t *testing.T) {
 	first := list.Tasks[0].UpdatedAt
 
 	// A note appends a newer provenance entry; updatedAt must not go backwards.
-	call(t, h, "POST", "/api/tasks/WEB-001/note", `{"text":"hi"}`, &created)
+	call(t, h, "POST", "/api/tasks/"+created.ID+"/note", `{"text":"hi"}`, &created)
 	call(t, h, "GET", "/api/tasks", "", &list)
 	if list.Tasks[0].UpdatedAt < first {
 		t.Fatalf("updatedAt regressed: %q < %q", list.Tasks[0].UpdatedAt, first)
@@ -317,7 +321,7 @@ func TestUpdateFieldsAndStatusActor(t *testing.T) {
 	var created taskDTO
 	call(t, h, "POST", "/api/tasks", `{"title":"x"}`, &created)
 	var updated taskDTO
-	call(t, h, "POST", "/api/tasks/WEB-001/update", `{"priority":"high","labels":["backend"]}`, &updated)
+	call(t, h, "POST", "/api/tasks/"+created.ID+"/update", `{"priority":"high","labels":["backend"]}`, &updated)
 	if updated.Priority != "high" || len(updated.Labels) != 1 || updated.Labels[0] != "backend" {
 		t.Fatalf("update not applied: %+v", updated)
 	}
@@ -332,7 +336,7 @@ func TestUpdateValidationAndGetUpdatedAt(t *testing.T) {
 
 	// single-task GET carries updatedAt (regression: dtoFromDoc must set it)
 	var got taskDTO
-	call(t, h, "GET", "/api/tasks/WEB-001", "", &got)
+	call(t, h, "GET", "/api/tasks/"+created.ID, "", &got)
 	if got.UpdatedAt == "" {
 		t.Fatal("GET task missing updatedAt")
 	}
@@ -342,7 +346,7 @@ func TestUpdateValidationAndGetUpdatedAt(t *testing.T) {
 		t.Fatalf("missing parent status = %d, want 422; body=%s", code, body)
 	}
 	// invalid priority -> 422
-	if code, _ := raw(h, "POST", "/api/tasks/WEB-001/update", `{"priority":"ASAP"}`); code != http.StatusUnprocessableEntity {
+	if code, _ := raw(h, "POST", "/api/tasks/"+created.ID+"/update", `{"priority":"ASAP"}`); code != http.StatusUnprocessableEntity {
 		t.Fatalf("invalid priority status = %d, want 422", code)
 	}
 }
@@ -354,7 +358,7 @@ func TestReorderEndpoint(t *testing.T) {
 	var created taskDTO
 	call(t, h, "POST", "/api/tasks", `{"title":"x"}`, &created)
 	var got taskDTO
-	call(t, h, "POST", "/api/tasks/WEB-001/reorder", `{"rank":2048}`, &got)
+	call(t, h, "POST", "/api/tasks/"+created.ID+"/reorder", `{"rank":2048}`, &got)
 	if got.Rank != 2048 {
 		t.Fatalf("rank = %v, want 2048", got.Rank)
 	}

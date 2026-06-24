@@ -36,3 +36,10 @@ Each observation becomes a tool-improvement task. (The generic working agreement
   PROJ-043).** Dogfooding showed the sidebar move from Active to Awaiting review while the
   open task still displayed the old live heartbeat. Task and session SSE events now
   invalidate both task-detail and session-history queries.
+- **#8 — sequential counter ids collide across clones (FIXED in PROJ-045).** Two people
+  working in separate clones both read `counter` from `config.yaml`, both minted the same
+  `PROJ-NNN`, and both wrote the same task file — an unavoidable double git conflict (the
+  counter line *and* the filename) needing manual resolution on every push. The in-process
+  `flock` can't help across machines. Fixed: ids are now minted as `prefix` + a time-ordered,
+  collision-resistant base32 token (`store.mintTaskID`); `create` no longer touches the
+  counter, so concurrent creators never collide and their new files merge cleanly.

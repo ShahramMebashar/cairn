@@ -8,7 +8,78 @@ import (
 
 	"cairn/internal/session"
 	"cairn/internal/store"
+	"cairn/internal/task"
 )
+
+// beginOn starts a session for taskID as agent:codex and returns its id.
+func beginOn(t *testing.T, svc *Service, taskID, key string) string {
+	t.Helper()
+	ses, err := svc.BeginSession(context.Background(), BeginSessionInput{
+		TaskID: taskID, ExpectedActor: "agent:codex", Client: "codex", IdempotencyKey: key,
+	})
+	if err != nil {
+		t.Fatalf("BeginSession: %v", err)
+	}
+	return ses.ID
+}
+
+// TestFinishRefusesUnrunChecks is the regression guard for the PROJ-045 handoff miss: a
+// session cannot finish into review while a command check is still pending. The agent must
+// run the checks (recording pass) first; only then does finish move the task to review.
+func TestFinishRefusesUnrunChecks(t *testing.T) {
+	svc := NewServiceWithClient(service(t, "agent:codex").store, "agent:codex", "codex", nil)
+	taskDoc, _ := svc.Create(store.Draft{Title: "x", Checks: []task.Check{{Desc: "build", Cmd: "exit 0"}}})
+	id := taskDoc.Task.ID
+	sid := beginOn(t, svc, id, "begin-1")
+
+	// Finish without running checks: the cmd check is still pending, so the gate refuses.
+	if _, err := svc.FinishSession(context.Background(), FinishSessionInput{SessionID: sid, Summary: "done"}); !errors.Is(err, task.ErrChecksNotPassed) {
+		t.Fatalf("FinishSession with pending checks = %v, want ErrChecksNotPassed", err)
+	}
+	reloaded, _ := svc.Get(id)
+	if reloaded.Task.Status != "in_progress" {
+		t.Fatalf("status after refused finish = %q, want in_progress (session not handed off)", reloaded.Task.Status)
+	}
+	if sess, _ := svc.store.GetSession(sid); sess.Session.Status != session.StatusActive {
+		t.Fatalf("session status after refused finish = %q, want active", sess.Session.Status)
+	}
+
+	// Run the checks (records pass), then finish succeeds and moves to review.
+	if _, err := svc.RunChecks(id, nil); err != nil {
+		t.Fatalf("RunChecks: %v", err)
+	}
+	if _, err := svc.FinishSession(context.Background(), FinishSessionInput{SessionID: sid, Summary: "done"}); err != nil {
+		t.Fatalf("FinishSession after run_checks: %v", err)
+	}
+	reloaded, _ = svc.Get(id)
+	if reloaded.Task.Status != "in_review" {
+		t.Fatalf("status after passing finish = %q, want in_review", reloaded.Task.Status)
+	}
+}
+
+// TestFinishAllowsPendingManualCheck confirms manual checks are exempt at handoff: they're
+// attested during review, so a session finishes into review with the cmd checks passing even
+// while a manual check is still pending.
+func TestFinishAllowsPendingManualCheck(t *testing.T) {
+	svc := NewServiceWithClient(service(t, "agent:codex").store, "agent:codex", "codex", nil)
+	taskDoc, _ := svc.Create(store.Draft{Title: "x", Checks: []task.Check{
+		{Desc: "build", Cmd: "exit 0"},
+		{Desc: "human review", Type: "manual"},
+	}})
+	id := taskDoc.Task.ID
+	sid := beginOn(t, svc, id, "begin-1")
+
+	if _, err := svc.RunChecks(id, nil); err != nil { // records the cmd check pass; manual stays pending
+		t.Fatalf("RunChecks: %v", err)
+	}
+	if _, err := svc.FinishSession(context.Background(), FinishSessionInput{SessionID: sid, Summary: "done"}); err != nil {
+		t.Fatalf("FinishSession with pending manual check = %v, want success", err)
+	}
+	reloaded, _ := svc.Get(id)
+	if reloaded.Task.Status != "in_review" {
+		t.Fatalf("status = %q, want in_review (manual check attested later)", reloaded.Task.Status)
+	}
+}
 
 func TestSessionIdentityMismatchWritesNothing(t *testing.T) {
 	svc := service(t, "agent:codex")

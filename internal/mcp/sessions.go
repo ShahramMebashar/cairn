@@ -245,6 +245,33 @@ func (svc *Service) FinishSession(ctx context.Context, in FinishSessionInput) (S
 		if err := svc.ownsSession(d.Session); err != nil {
 			return err
 		}
+		taskDoc, err := tx.GetTask(d.Session.TaskID)
+		if err != nil {
+			return err
+		}
+		cfg, err := tx.Config()
+		if err != nil {
+			return err
+		}
+		review := cfg.Review()
+		movingToReview := review != "" && !slices.Contains(cfg.Closed, taskDoc.Task.Status) && taskDoc.Task.Status != review
+
+		// Enforce the review checks gate UP FRONT, before ending the session: a handoff into
+		// review requires every COMMAND check to be recorded `pass` (manual checks are exempt
+		// — they're attested during review). If they're pending or failing, refuse the whole
+		// finish so the session stays active; the agent runs `run_checks` (which executes
+		// outside this write lock) and retries. This makes "run checks before handoff" a hard
+		// engine gate, not a documented suggestion — while keeping the build off the lock.
+		if movingToReview {
+			all, err := tx.Tasks()
+			if err != nil {
+				return err
+			}
+			if gateErr := task.CanTransition(taskDoc.Task, review, all, rulesOf(cfg)); gateErr != nil {
+				return gateErr
+			}
+		}
+
 		finished := d.Session
 		if d.Session.Status != session.StatusFinished {
 			live, err := tx.ReadLive(d.Session.ID)
@@ -268,15 +295,7 @@ func (svc *Service) FinishSession(ctx context.Context, in FinishSessionInput) (S
 			return err
 		}
 
-		taskDoc, err := tx.GetTask(d.Session.TaskID)
-		if err != nil {
-			return err
-		}
-		cfg, err := tx.Config()
-		if err != nil {
-			return err
-		}
-		if review := cfg.Review(); review != "" && !slices.Contains(cfg.Closed, taskDoc.Task.Status) && taskDoc.Task.Status != review {
+		if movingToReview {
 			taskDoc.SetStatus(review)
 			taskDoc.AppendProvenance(svc.actor, "finished session "+d.Session.ID, finished.Summary, svc.now())
 			if err := tx.SaveTask(taskDoc); err != nil {

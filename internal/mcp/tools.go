@@ -183,7 +183,7 @@ func NewServer(svc *Service) *mcpsdk.Server {
 // --- tool I/O schemas (jsonschema tags drive the MCP input schema) ---
 
 type idIn struct {
-	ID string `json:"id" jsonschema:"the task id, e.g. PROJ-001"`
+	ID string `json:"id" jsonschema:"the task id, e.g. PROJ-01j8x2k7q7f3az"`
 }
 
 type listIn struct {

@@ -173,6 +173,68 @@ func TestCanTransition(t *testing.T) {
 	}
 }
 
+// TestCanTransitionReviewGate covers the handoff gate: entering the review state requires
+// every COMMAND check to pass, while manual checks stay exempt until attested during review.
+func TestCanTransitionReviewGate(t *testing.T) {
+	reviewRules := Rules{
+		Initial: "backlog",
+		Closed:  []string{"done", "canceled"},
+		States:  []string{"backlog", "in_progress", "in_review", "done", "canceled"},
+		Review:  "in_review",
+	}
+	tests := []struct {
+		name string
+		task Task
+		to   string
+		want error
+	}{
+		{
+			name: "enter review with a pending cmd check is blocked",
+			task: Task{ID: "T", Status: "in_progress", Checks: []Check{pendingCheck()}},
+			to:   "in_review",
+			want: ErrChecksNotPassed,
+		},
+		{
+			name: "enter review with a failing cmd check is blocked",
+			task: Task{ID: "T", Status: "in_progress", Checks: []Check{passCheck(), failCheck()}},
+			to:   "in_review",
+			want: ErrChecksNotPassed,
+		},
+		{
+			name: "enter review with all cmd checks passing is allowed",
+			task: Task{ID: "T", Status: "in_progress", Checks: []Check{passCheck(), passCheck()}},
+			to:   "in_review",
+			want: nil,
+		},
+		{
+			name: "enter review with a pending MANUAL check is allowed (attested during review)",
+			task: Task{ID: "T", Status: "in_progress", Checks: []Check{passCheck(), manualPending()}},
+			to:   "in_review",
+			want: nil,
+		},
+		{
+			name: "enter review with zero checks passes vacuously",
+			task: Task{ID: "T", Status: "in_progress"},
+			to:   "in_review",
+			want: nil,
+		},
+		{
+			name: "closing still requires the manual check even after review let it through",
+			task: Task{ID: "T", Status: "in_review", Checks: []Check{passCheck(), manualPending()}},
+			to:   "done",
+			want: ErrChecksNotPassed,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := CanTransition(tt.task, tt.to, graph(), reviewRules)
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("CanTransition(%q -> %q) = %v, want errors.Is %v", tt.task.Status, tt.to, err, tt.want)
+			}
+		})
+	}
+}
+
 func TestReady(t *testing.T) {
 	tests := []struct {
 		name string

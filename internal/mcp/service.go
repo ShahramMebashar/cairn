@@ -47,7 +47,7 @@ func NewServiceWithClient(s *store.Store, actor, client string, now func() time.
 }
 
 func rulesOf(c config.Config) task.Rules {
-	return task.Rules{Initial: c.Initial, Closed: c.Closed, States: c.States}
+	return task.Rules{Initial: c.Initial, Closed: c.Closed, States: c.States, Review: c.Review()}
 }
 
 // TaskView is a task plus derived fields: readiness (SPEC §4: computed, not stored) and the
@@ -286,15 +286,20 @@ func (svc *Service) Transition(id, to string) (*store.Doc, error) {
 	}
 	rules := rulesOf(cfg)
 
+	// Report deps/unknown-state failures before touching checks (deps are reported first).
 	gateErr := task.CanTransition(doc.Task, to, all, rules)
-	if gateErr == nil {
-		return svc.commitTransition(doc, to)
-	}
-	if !errors.Is(gateErr, task.ErrChecksNotPassed) {
-		return nil, gateErr // deps gate or unknown state: no auto-run
+	if gateErr != nil && !errors.Is(gateErr, task.ErrChecksNotPassed) {
+		return nil, gateErr
 	}
 
-	// Checks gate: auto-run the cmd checks, persist results, then re-evaluate.
+	// Verification-asserting transitions (entering the review state or a closed state) ALWAYS
+	// re-run the command checks fresh and never trust a previously-recorded pass — a stored
+	// result can be stale relative to the current code. Other transitions commit directly.
+	gated := rules.IsClosed(to) || (rules.Review != "" && to == rules.Review)
+	if !gated {
+		return svc.commitTransition(doc, to) // gateErr is nil: only closed/review gate checks
+	}
+
 	if err := svc.runCmdChecks(doc, cfg, nil); err != nil {
 		return nil, err
 	}

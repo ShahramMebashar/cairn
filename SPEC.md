@@ -84,7 +84,7 @@ Prose intent and constraints go here. The engine never edits the body after crea
 
 | Field | Required | Owner | Notes |
 |---|---|---|---|
-| `id` | yes | engine | Assigned by engine at create (`prefix` + counter). Never set by a caller. Stable forever; never reused. |
+| `id` | yes | engine | Assigned by engine at create: `prefix` + a time-ordered, collision-resistant base32 token (millisecond timestamp + random). Never set by a caller. Stable forever; never reused. Sorts lexically by creation time. |
 | `title` | yes | caller | Free text. |
 | `status` | yes | engine on write | One of the config `states`. |
 | `assignee` | no | engine | `human:<name>` or `agent:<name>`. Set by `claim`. |
@@ -102,7 +102,7 @@ Prose intent and constraints go here. The engine never edits the body after crea
 
 ```yaml
 prefix: PROJ                 # id prefix
-counter: 2                   # last assigned number; engine increments on create
+counter: 2                   # deprecated, unused; retained so existing configs still parse
 states: [backlog, in_progress, in_review, done, canceled]
 closed: [done, canceled]     # subset of states considered "closed"
 initial: backlog             # the state new tasks start in
@@ -111,7 +111,11 @@ check_timeout_default: 120   # seconds, used when a check omits `timeout`
 
 - `states` are user-defined free strings. There is **no hardcoded status enum.**
 - `closed` lists which states count as closed (for deps-readiness and the checks gate).
-- `counter` is the monotonic id source. Engine reads it, assigns `counter+1`, writes it back, all under the process mutex.
+- Ids are minted at create as `prefix` + a time-ordered, collision-resistant base32 token
+  (millisecond timestamp + `crypto/rand` tail). No shared counter is read or written, so two
+  people creating tasks in separate clones never collide on the id or the on-disk filename —
+  their new task files merge cleanly with no conflict. `counter` is retained only so older
+  configs parse; it is no longer used.
 
 ---
 
@@ -130,11 +134,13 @@ check_timeout_default: 120   # seconds, used when a check omits `timeout`
 Transitions are **free** — any state to any state — except for exactly **two gates**. No forced ordering (`backlog → in_progress → done` is not enforced; `backlog → done` directly is allowed if both gates pass).
 
 1. **Deps gate** — cannot leave `initial` unless all deps are closed (§4).
-2. **Checks gate** — cannot enter a `closed` state unless all `checks` pass.
-   - Zero checks ⇒ vacuously passes ⇒ closes freely.
-   - On a transition *into* a closed state: if checks are already all `pass`, close. Otherwise **auto-run** the checks first, then close on all-pass or **refuse** on any fail. (This means a close can block up to the checks' timeout. That latency is intentional — closing is exactly when verification belongs.)
+2. **Checks gate** — fires on two entries:
+   - **Closing** (entry into a `closed` state) requires **every** check to pass — command checks and attested manual checks alike.
+   - **Handoff** (entry into the `review` state) requires every **command** check to pass. Manual checks are *exempt* here: they are attested during review, so a task hands off with manual checks still `pending` and parks until attested. This makes handoff un-skippable — an agent cannot finish a session into review with command checks pending or failing.
+   - Zero (applicable) checks ⇒ vacuously passes.
+   - **Freshness:** transitions into the review or a closed state **always re-run** the command checks rather than trusting a previously recorded `pass`, which may be stale relative to the current code. (Handoff via `finish` instead requires the checks to be recorded `pass` first — the agent runs them with `run_checks`, which executes off the repository write lock; closing then re-verifies fresh.) A close can therefore block up to the checks' timeout. That latency is intentional — closing is exactly when verification belongs.
 
-Reopening a closed task is allowed (free transition). Check results are **not** auto-reset on reopen; they retain their last value.
+Reopening a closed task is allowed (free transition). Check results are **not** auto-reset on reopen; they retain their last value, but a subsequent re-close re-runs them.
 
 ---
 
@@ -159,9 +165,9 @@ Identity (`--actor`, e.g. `agent:claude-1`) is injected at server startup, **not
 |---|---|---|---|
 | `list` | R | `list(status?, assignee?, ready?)` | Returns tasks, filterable. `ready` is the derived deps-satisfied flag. `list(ready=true, status=backlog)` = "what can I start now." |
 | `get` | R | `get(id)` | Full task: body, checks (+results), provenance. |
-| `create` | W | `create(title, body?, deps?, checks?)` | Engine assigns `id` (`prefix`+counter), sets `status=initial`, first provenance entry `{who:<actor>, did:created}`. |
+| `create` | W | `create(title, body?, deps?, checks?)` | Engine assigns a time-ordered `id`, sets `status=initial`, first provenance entry `{who:<actor>, did:created}`. |
 | `claim` | W | `claim(id)` | Sets `assignee=<actor>`. **Fails if already claimed** by someone else (claiming own is a no-op/ok). |
-| `transition` | W | `transition(id, to)` | Applies gates (§5). Closing auto-runs checks and refuses on fail. |
+| `transition` | W | `transition(id, to)` | Applies gates (§5). Closing (and entering review) re-runs the command checks fresh and refuses on fail. |
 | `run_checks` | W | `run_checks(id, only?)` | Runs all `cmd` checks by default; `only` filters by check index/id. Writes results. |
 | `note` | W | `note(id, text)` | Appends a provenance entry carrying `text`. |
 
@@ -179,6 +185,7 @@ Gate logic is **not** implemented inside these verbs — they call `internal/tas
 - **Atomic writes:** write to a temp file in the same dir, then `rename` over the target, so a concurrent reader never sees a half-written file.
 - **Serialization:** all writes guarded by a single in-process `sync.Mutex`. Single process ⇒ sufficient. No distributed locking.
 - **Concurrency with external editors:** a human editing a file in their editor while an agent writes = last-write-wins, same as two people editing one file. Inherent, documented, accepted for v0.
+- **Concurrency across clones:** because ids are time-ordered + random (not a shared counter), two people creating tasks offline in separate clones never collide on an id or a filename. Their new task files merge as two unrelated additions — no manual conflict resolution.
 
 ---
 
@@ -225,7 +232,7 @@ Dependency graph is acyclic. `config`, `task`, `check` are leaves. `task` owns a
 1. **Scaffold** — `go mod init`, package skeleton, `.gitignore` (`runs/`), example `config.yaml` + 2 example tasks.
 2. **`internal/task`** — `Task` type, `Ready(t, all)`, `CanTransition(t, to, all, cfg)`. Table-driven tests covering: deps-gate on leaving initial, checks-gate on closing, free intermediate transitions, reopen keeps results, cycle/dangling detection signatures. **Get this right before anything else — it is the heart.**
 3. **`internal/check`** — `sh -c` runner: cwd, timeout (kill), exit-code mapping, output tail to `runs/`.
-4. **`internal/config`** — load/save, counter increment.
+4. **`internal/config`** — load/save engine config (states, prefix). Id minting lives in `internal/store` (it needs a clock + randomness; config stays a pure leaf).
 5. **`internal/store`** — parse (lossless), `yaml.Node` surgical writes, atomic temp+rename, dir scan, process mutex, dangling/cycle validation on load.
 6. **`internal/mcp`** — wire the 7 verbs to store/task/check; identity from `--actor`; provenance on every write.
 7. **Dogfood** — run the server, point a Claude Code / MCP client at it, drive one real Froshly task end-to-end (create → claim → run_checks → transition done) over MCP.

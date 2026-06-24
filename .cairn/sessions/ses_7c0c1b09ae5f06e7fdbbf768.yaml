@@ -1,0 +1,12 @@
+id: ses_7c0c1b09ae5f06e7fdbbf768
+task: PROJ-046
+attempt: att_7c0c1b09ae5f06e7fdbbf768
+actor: agent:claude
+client: claude
+model: claude-opus-4-8
+status: finished
+idempotency_key: PROJ-046-checkgate-v1
+started_at: 2026-06-24T16:52:19.899189Z
+branch: main
+ended_at: 2026-06-24T16:58:18Z
+summary: 'Made the checks gate un-skippable at the engine level. #1: entering the review state now requires every command check to pass (task.Rules.Review + CanTransition); finish enforces it before ending the session, so a pending/failing-cmd handoff refuses and the session stays active. Manual checks remain exempt at handoff (attested during review). #2: transitions into review/closed always re-run cmd checks fresh — a stale recorded pass can no longer close a task. Finish gates on recorded results and pushes the actual run to run_checks (off the write lock) to avoid holding the repo lock during a build. Tests added in internal/task and internal/mcp (incl. a regression guard for the exact PROJ-045 miss). Docs: SPEC §5, WORKFLOW.md. go test ./... + pnpm build both pass (run via run_checks); gofmt + vet clean. Review focus: the recorded-vs-rerun split between finish and close, and whether re-running on every close is acceptable latency vs. the deferred git-fingerprint optimization. Heads-up: this session''s cairn binary predates the change, so rebuild + reconnect before the gate is live in the running server.'

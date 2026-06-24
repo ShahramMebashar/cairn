@@ -4,10 +4,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
+	"cairn/internal/config"
 	"cairn/internal/task"
 )
 
@@ -170,15 +172,18 @@ func TestSetCheckResult(t *testing.T) {
 	}
 }
 
-func TestCreateMintsIDAndIncrementsCounter(t *testing.T) {
+func TestCreateMintsTimeOrderedID(t *testing.T) {
 	s := New(repo(t, map[string]string{"PROJ-001": minimalTask}))
-	at := time.Date(2026, 6, 21, 12, 0, 0, 0, time.UTC)
-	d, err := s.Create(Draft{Title: "New work", Body: "the body\n", Deps: []string{"PROJ-001"}}, "agent:claude-1", at)
+	idRe := regexp.MustCompile(`^PROJ-[0-9a-z]{16}$`)
+	earlier := time.Date(2026, 6, 21, 12, 0, 0, 0, time.UTC)
+	later := earlier.Add(time.Second)
+
+	d, err := s.Create(Draft{Title: "New work", Body: "the body\n", Deps: []string{"PROJ-001"}}, "agent:claude-1", earlier)
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if d.Task.ID != "PROJ-003" {
-		t.Fatalf("id = %q, want PROJ-003", d.Task.ID)
+	if !idRe.MatchString(d.Task.ID) {
+		t.Fatalf("id = %q, want match %s", d.Task.ID, idRe)
 	}
 	if d.Task.Status != "backlog" {
 		t.Fatalf("status = %q, want initial backlog", d.Task.Status)
@@ -186,16 +191,35 @@ func TestCreateMintsIDAndIncrementsCounter(t *testing.T) {
 	if len(d.Provenance) != 1 || d.Provenance[0].Did != "created" {
 		t.Fatalf("missing created provenance: %+v", d.Provenance)
 	}
-	// File exists and counter persisted.
-	if _, err := os.Stat(filepath.Join(s.tasksDir(), "PROJ-003.md")); err != nil {
+	if _, err := os.Stat(s.taskPath(d.Task.ID)); err != nil {
 		t.Fatalf("file not written: %v", err)
 	}
-	again, err := s.Create(Draft{Title: "More"}, "agent:claude-1", at)
+
+	// A second create at the same instant gets a distinct id (random tail).
+	twin, err := s.Create(Draft{Title: "Same-instant"}, "agent:claude-1", earlier)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if again.Task.ID != "PROJ-004" {
-		t.Fatalf("second id = %q, want PROJ-004 (counter not persisted)", again.Task.ID)
+	if twin.Task.ID == d.Task.ID {
+		t.Fatalf("same-instant create reused id %q", d.Task.ID)
+	}
+
+	// A later create sorts after an earlier one (lexical == chronological).
+	again, err := s.Create(Draft{Title: "More"}, "agent:claude-1", later)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !(again.Task.ID > d.Task.ID) {
+		t.Fatalf("later id %q should sort after earlier id %q", again.Task.ID, d.Task.ID)
+	}
+
+	// config.yaml is untouched — no counter to bump, so concurrent creators never conflict.
+	cfg, err := config.Load(s.configPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Counter != 2 {
+		t.Fatalf("counter = %d, want 2 (unchanged by create)", cfg.Counter)
 	}
 }
 
