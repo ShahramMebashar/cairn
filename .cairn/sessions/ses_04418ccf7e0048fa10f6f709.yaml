@@ -1,0 +1,26 @@
+id: ses_04418ccf7e0048fa10f6f709
+task: PROJ-2apasa01bn
+attempt: att_04418ccf7e0048fa10f6f709
+actor: agent:claude
+client: claude
+status: finished
+idempotency_key: readme-security-changelog-2026-06-25
+started_at: 2026-06-25T13:23:24.656867Z
+branch: main
+ended_at: 2026-06-25T13:28:24Z
+summary: |-
+  Repo-meta polish + indigo brand reconciliation.
+
+  Screenshot: copied app-screenshot.png → docs/public/; embedded on the docs home (index.md body, below the hero) and in the new root README.
+
+  README.md (was empty): centered indigo logo, full-width screenshot, tagline, quickstart, a "run it your way" table (desktop/web/MCP), supported agents, development commands, a security pointer, and MIT — all linking the docs site.
+
+  SECURITY.md: cairn-specific. Local single-user / no-auth-by-design trust model; a prominent GitHub [!WARNING] alert that checks run arbitrary shell (closing a task auto-runs them) so only operate on trusted repos; guarantees (actor-stamping + begin's expected_actor refusal, safe-merge config writes with .bak + verify, advisory write.lock, no human-actor fallback for agents); report via GitHub Security Advisories. Used a GitHub alert, not a VitePress container, since it renders on GitHub.
+
+  CHANGELOG.md: Keep a Changelog + SemVer; [Unreleased] (Connect integrations, Disconnect, docs site, SECURITY) and [0.1.0] initial; notes the version lives in internal/mcp/sessions.go ServiceVersion + desktop/src-tauri/tauri.conf.json and that pre-1.0 minors may break.
+
+  Brand → #4c5edf indigo (per user): replaced the docs logo (was the purple #863bff/#7e14ff favicon mark) with the actual cairn stacked-stones mark, which uses #4c5edf — added light (docs/public/logo.svg) and dark (logo-dark.svg, dark stones lightened) variants wired to nav + hero. Set the VitePress theme accent to indigo via docs/.vitepress/theme/{index.ts,custom.css} (brand-1/2/3 + hero name gradient, with a .dark override). Nav v0.x dropdown now links Changelog + Security policy + SPEC.
+
+  Verification: `npm --prefix docs run build` clean; logo.svg, logo-dark.svg, app-screenshot.png published to dist; indigo #4c5edf present 5× in the built CSS. Both command checks pass.
+
+  Open: manual review of README/SECURITY/CHANGELOG. Note the web app favicon (web/public/favicon.svg) is still the purple mark — not touched here; say the word to align it (and the Tauri icon) to #4c5edf for full brand consistency.

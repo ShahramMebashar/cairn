@@ -5,6 +5,10 @@ hero:
   name: cairn
   text: Task management your agents and you share
   tagline: A repo-native task graph as plain Markdown files, served to AI agents over MCP and to humans over a clean web UI — one source of truth, one rule-set, no database.
+  image:
+    light: /logo.svg
+    dark: /logo-dark.svg
+    alt: cairn
   actions:
     - theme: brand
       text: Get started
@@ -24,7 +28,11 @@ features:
     details: The web UI and the MCP server are thin adapters over the same engine in internal/task — the rules can't drift between what an agent sees and what you see.
   - title: Connect any agent in one click
     details: The Connect page detects installed agents (Claude, Cursor, Codex, Windsurf, OpenCode, Kilo, Pi…) and writes their MCP config for you — each under its own identity.
+  - title: Run it however you like
+    details: A native desktop app with a live tray, a browser UI, or a headless MCP server — all the same binary. Build the app with make desktop, or just run cairn web.
 ---
+
+![The cairn task board, graph, and Connect page](/app-screenshot.png)
 
 ## Supported agents
 

@@ -9,9 +9,40 @@ title: Installation
 - **Go 1.25+** to build the binary.
 - **POSIX shell (`sh`)** to run task checks. macOS and Linux work out of the box; on Windows
   use WSL or Git Bash.
-- **Node 18+** only if you want to build the web UI or these docs from source.
+- **Node 18+** only if you want to build the web UI, the desktop app, or these docs from source.
+- **Rust toolchain** only to build the desktop app (Tauri).
 
-## Build
+## Desktop app
+
+The easiest way to run cairn is the desktop app — a small cross-platform window with a live
+menu-bar tray that bundles the web UI and the `cairn` binary together. It's the same thing
+`cairn web` serves, just native, and it can configure agents, fire notifications, and stay in
+your tray.
+
+::: warning Prebuilt installers — placeholder
+Signed installers aren't published yet. Build from source for now (below). Once the first
+version is tagged, installers for macOS, Linux, and Windows will appear on the
+[Releases page](https://github.com/ShahramMebashar/cairn/releases) and update themselves in
+place.
+:::
+
+Build the installer for your OS:
+
+```sh
+make desktop       # -> native installer (.dmg / .AppImage / .msi)
+```
+
+This packages the app with [Tauri](https://tauri.app): it builds the web UI, compiles the
+`cairn` binary as a bundled **sidecar**, and wraps both in a native shell. To iterate without
+packaging:
+
+```sh
+make desktop-dev   # native window against a dev server (run `make web` alongside)
+```
+
+Prefer the command line or a headless server? Skip the app and use the Go binary directly.
+
+## Build the binary
 
 ```sh
 make build        # -> bin/cairn

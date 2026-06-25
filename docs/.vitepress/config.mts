@@ -12,7 +12,11 @@ export default defineConfig({
   lastUpdated: true,
   cleanUrls: true,
 
+  head: [['link', { rel: 'icon', type: 'image/svg+xml', href: '/cairn/logo.svg' }]],
+
   themeConfig: {
+    logo: { light: '/logo.svg', dark: '/logo-dark.svg' },
+
     nav: [
       {
         text: 'Guide',
@@ -24,8 +28,9 @@ export default defineConfig({
       {
         text: 'v0.x',
         items: [
+          { text: 'Changelog', link: 'https://github.com/ShahramMebashar/cairn/blob/main/CHANGELOG.md' },
+          { text: 'Security policy', link: 'https://github.com/ShahramMebashar/cairn/blob/main/SECURITY.md' },
           { text: 'SPEC (frozen v0 contract)', link: 'https://github.com/ShahramMebashar/cairn/blob/main/SPEC.md' },
-          { text: 'Changelog', link: 'https://github.com/ShahramMebashar/cairn/releases' },
         ],
       },
     ],

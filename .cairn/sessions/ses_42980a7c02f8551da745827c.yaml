@@ -1,0 +1,20 @@
+id: ses_42980a7c02f8551da745827c
+task: PROJ-2ap9rwb34x
+attempt: att_42980a7c02f8551da745827c
+actor: agent:claude
+client: claude
+status: finished
+idempotency_key: docs-logo-desktop-2026-06-25
+started_at: 2026-06-25T13:18:31.166676Z
+branch: main
+ended_at: 2026-06-25T13:20:25Z
+summary: |-
+  Added the cairn logo and desktop-app documentation to the docs site.
+
+  Logo: copied web/public/favicon.svg → docs/public/logo.svg and wired it as the nav logo (themeConfig.logo), the hero image (index.md hero.image), and the favicon (head link, base-prefixed /cairn/logo.svg). Chose the favicon mark over desktop/src-tauri/cairn-logo.svg because the latter uses dark fills that disappear on VitePress's dark navbar; the favicon's solid #863bff mark reads on both themes.
+
+  Desktop app: previously the docs only described the Go binary. Added a "## Desktop app" section to installation.md, framed as the easiest way to run cairn — `make desktop` (Tauri installer that embeds the UI + the cairn binary as a sidecar) and `make desktop-dev`. Included a placeholder ::: warning that signed prebuilt installers aren't published yet (build from source until the first tagged release appears on the Releases page and auto-updates). Added Node/Rust to requirements, renamed "## Build" → "## Build the binary", and added a 5th home feature card ("Run it however you like — desktop app, browser UI, or headless MCP server").
+
+  Verification: `npm --prefix docs run build` clean; logo.svg published to dist and referenced 4× (nav, hero, favicon). Both command checks pass.
+
+  Still open: the manual accuracy-review check, and the one-time GitHub Pages "Source = GitHub Actions" setting before the site publishes at https://shahrammebashar.github.io/cairn/.
