@@ -1,6 +1,6 @@
 BIN := bin/cairn
 
-.PHONY: build test fmt vet check run dev up web web-dev web-build tidy clean
+.PHONY: build test fmt vet check run dev up web web-dev web-build tidy clean desktop desktop-dev desktop-up sidecar
 
 build: ## Build the cairn binary into bin/
 	go build -o $(BIN) ./cmd/cairn
@@ -38,6 +38,23 @@ web-dev: ## Run the Vite dev server (proxies /api to :8080 — run `make web` to
 
 web-build: ## Build the web UI (web/dist)
 	cd web && pnpm build
+
+desktop-dev: ## Run the Tauri desktop app in dev (run `make web` in another shell)
+	cd desktop && pnpm tauri:dev
+
+desktop-up: build ## Run everything: Go server + Vite + desktop window (REPO=. ADDR=:8080)
+	@echo "backend on $(or $(ADDR),:8080) + tauri dev (starts vite) — Ctrl-C stops all"
+	@trap 'kill 0' EXIT INT TERM; \
+		$(BIN) web --repo $(or $(REPO),.) --addr $(or $(ADDR),:8080) & \
+		(cd desktop && pnpm tauri:dev) & \
+		wait
+
+desktop: ## Build the Tauri desktop installer for this OS (embeds UI + sidecar)
+	cd web && pnpm install
+	cd desktop && pnpm install && pnpm tauri:build
+
+sidecar: ## Build the cairn binary as a Tauri sidecar (desktop/src-tauri/binaries)
+	node scripts/build-sidecar.mjs
 
 tidy: ## Tidy go.mod/go.sum
 	go mod tidy

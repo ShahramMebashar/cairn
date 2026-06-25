@@ -49,6 +49,11 @@ export function resolveSlug(slug: string): string | null {
   return load()[slug] ?? null;
 }
 
+/** listWorkspaces returns every registered workspace (for the quick-capture switcher). */
+export function listWorkspaces(): { slug: string; path: string }[] {
+  return Object.entries(load()).map(([slug, path]) => ({ slug, path }));
+}
+
 /** lastWorkspace returns the most recently opened workspace, if any. */
 export function lastWorkspace(): { slug: string; path: string } | null {
   const path = localStorage.getItem(LAST_KEY);

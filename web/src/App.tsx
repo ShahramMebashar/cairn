@@ -13,7 +13,11 @@ import { BoardView } from "@/pages/BoardView";
 import { TaskDetail } from "@/pages/TaskDetail";
 import { Graph } from "@/pages/Graph";
 import { CommandPalette } from "@/components/CommandPalette";
+import { CaptureView } from "@/components/CaptureView";
+import { SettingsDialog } from "@/components/SettingsDialog";
 import { useStatus, useTaskEvents } from "@/lib/queries";
+import { useDesktopMenu, useTrayBadge, useUpdater } from "@/lib/desktop-hooks";
+import { pickFolder } from "@/lib/tauri";
 import {
   forget,
   lastWorkspace,
@@ -26,11 +30,16 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, retry: false } },
 });
 
+// The global quick-add window loads the SPA at #capture and renders only the capture UI.
+function isCaptureRoute(): boolean {
+  return window.location.hash.replace(/^#\/?/, "") === "capture";
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider delayDuration={200}>
-        <Flow />
+        {isCaptureRoute() ? <CaptureView /> : <Flow />}
         <Toaster richColors />
       </TooltipProvider>
     </QueryClientProvider>
@@ -178,6 +187,7 @@ function Workspace({
 }) {
   const [creating, setCreating] = useState(false);
   const [createParent, setCreateParent] = useState<string | undefined>(undefined);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const newTask = () => {
     setCreateParent(undefined);
     setCreating(true);
@@ -188,6 +198,22 @@ function Workspace({
   };
 
   useTaskEvents(path); // live board/task updates from any actor via SSE
+
+  // Desktop integration (no-ops in the browser): tray badge, update checks, native menu.
+  useTrayBadge(path);
+  const checkUpdates = useUpdater();
+  const openFolder = async () => {
+    const picked = await pickFolder();
+    if (picked) window.location.hash = `#/${registerWorkspace(picked)}/all`;
+  };
+  useDesktopMenu({
+    "menu:new_task": newTask,
+    "menu:open_folder": () => void openFolder(),
+    "menu:board": () => navigate({ kind: "board" }),
+    "menu:graph": () => navigate({ kind: "graph" }),
+    "menu:settings": () => setSettingsOpen(true),
+    "menu:check_updates": () => void checkUpdates(true),
+  });
 
   return (
     <div className="flex h-screen overflow-hidden bg-app text-foreground">
@@ -203,6 +229,7 @@ function Workspace({
         onChangeFolder={onChangeFolder}
         onNewTask={newTask}
         onOpenTask={(id) => navigate({ kind: "task", id })}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
       <main className="min-w-0 flex-1 p-2 pl-0">
         <div className="flex h-full flex-col overflow-hidden rounded-xl border bg-panel shadow-xs">
@@ -256,6 +283,11 @@ function Workspace({
         onChangeFolder={onChangeFolder}
         onGraph={() => navigate({ kind: "graph" })}
         onBoard={() => navigate({ kind: "board" })}
+      />
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        onCheckUpdates={() => void checkUpdates(true)}
       />
     </div>
   );

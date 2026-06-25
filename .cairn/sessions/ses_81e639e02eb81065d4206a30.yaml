@@ -1,0 +1,24 @@
+id: ses_81e639e02eb81065d4206a30
+task: PROJ-2anqtezejt
+attempt: att_81e639e02eb81065d4206a30
+actor: agent:claude
+client: claude
+model: claude-opus-4-8
+status: finished
+idempotency_key: desktop-wave-2026-06-25-c
+started_at: 2026-06-25T07:59:18.088253Z
+branch: feat/desktop-tauri
+ended_at: 2026-06-25T08:15:36Z
+summary: |-
+  Shipped the desktop feature wave (4 milestones) on branch feat/desktop-tauri (uncommitted).
+
+  M1 Always-on hub: single-instance (focus existing, no duplicate sidecar), system tray (Open/New Task/Settings/Quit + left-click show), close-to-tray (X hides, server+MCP stay up), opt-in Launch-at-login (autostart plugin), set_tray_badge command driven by a useTrayBadge hook (awaiting-review count).
+  M2 Native notifications: notifications.ts mirrors ready/failed/awaiting_review to OS notifications when the window is unfocused (new "review" kind + ScanEye icon); isTauri-guarded; in-app bell unchanged.
+  M3 Quick-capture + menu + window-state: global Cmd/Ctrl+Shift+K opens a capture window (#capture route → CaptureView, last project + switcher, Enter creates, Esc closes); native menu bar with Edit submenu (macOS copy/paste) + accelerators emitting menu:* events consumed by useDesktopMenu; window geometry persists.
+  M4 Auto-updater: tauri-plugin-updater + process; tauri.conf createUpdaterArtifacts + plugins.updater (GitHub Releases latest.json endpoint + pubkey); useUpdater checks on launch + Settings button → install+relaunch. release.yml rewritten to tauri-apps/tauri-action (matrix mac arm/x64, linux, windows) which builds/signs/creates the release + generates latest.json.
+
+  New: web/src/lib/desktop.ts (+ desktop-hooks.ts), SettingsDialog, CaptureView, switch component; edits to lib.rs, Cargo.toml, tauri.conf.json, capabilities, notifications.ts, NotificationBell, AppSidebar, App.tsx, AGENTS.md.
+
+  Verified: go vet+test, frontend tsc+build, cargo check all green; full tauri build → Cairn.app launches, all 9 plugins init, server/UI/MCP work, Quit kills sidecar; browser/dev build unaffected (all guarded).
+
+  Open items: NOT committed. Repo secrets TAURI_SIGNING_PRIVATE_KEY + _PASSWORD must be added for releases (dev keypair generated to scratchpad, pubkey in tauri.conf — private key NOT committed and must be saved by the user). Apple/Windows code signing still deferred. Interactive behaviors + real auto-update need GUI/a published release to fully confirm (manual check left pending). Local DMG packaging needs a GUI runner (CI handles it).

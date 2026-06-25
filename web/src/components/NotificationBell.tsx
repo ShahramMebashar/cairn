@@ -4,6 +4,7 @@ import {
   CircleAlert,
   CircleDot,
   GitBranch,
+  ScanEye,
   Sparkles,
 } from "lucide-react";
 import {
@@ -21,6 +22,7 @@ const ICON: Record<Notif["kind"], { Icon: typeof Bell; cls: string }> = {
   blocked: { Icon: GitBranch, cls: "text-muted-foreground" },
   failed: { Icon: CircleAlert, cls: "text-destructive" },
   assigned: { Icon: CircleDot, cls: "text-foreground" },
+  review: { Icon: ScanEye, cls: "text-brand" },
 };
 
 export function NotificationBell({

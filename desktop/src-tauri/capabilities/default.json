@@ -1,0 +1,28 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Core, sidecar-spawn, dialog, notification, autostart, and window permissions for the local cairn server origin.",
+  "windows": ["main", "capture"],
+  "remote": {
+    "urls": ["http://localhost:*", "http://127.0.0.1:*"]
+  },
+  "permissions": [
+    "core:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-close",
+    "core:window:allow-set-focus",
+    "opener:default",
+    "dialog:default",
+    "notification:default",
+    "updater:default",
+    "process:allow-restart",
+    "autostart:allow-enable",
+    "autostart:allow-disable",
+    "autostart:allow-is-enabled",
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [{ "name": "binaries/cairn", "sidecar": true }]
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+id: ses_07d73d8770a7816997bca35a
+task: PROJ-2anjy1mqaq
+attempt: att_07d73d8770a7816997bca35a
+actor: agent:claude
+client: claude
+model: claude-opus-4-8
+status: finished
+idempotency_key: desktop-relocate-2026-06-25-b
+started_at: 2026-06-25T07:12:51.993501Z
+branch: feat/desktop-tauri
+ended_at: 2026-06-25T07:17:16Z
+head_finished: fc7511ea1d3e4860e4acf42c911412ca64bc73e9
+summary: |-
+  Relocated the Tauri desktop shell from web/src-tauri/ to a top-level desktop/ directory with its own desktop/package.json (just @tauri-apps/cli + tauri scripts). web/ is now purely the React app (keeps @tauri-apps/api + plugin-dialog runtime deps).
+
+  Rewired all paths: desktop/src-tauri/tauri.conf.json (frontendDist ../../web/dist, beforeDevCommand `pnpm --dir ../web dev`, beforeBuildCommand `pnpm --dir ../web build && node ../scripts/build-sidecar.mjs`); scripts/build-sidecar.mjs outDir → desktop/src-tauri/binaries; scripts/set-desktop-version.mjs → desktop/src-tauri paths; Makefile desktop/desktop-dev targets; both CI workflows (install web+desktop, build from desktop/, rust-cache workspace desktop/src-tauri, bundle globs desktop/src-tauri/...); AGENTS.md.
+
+  Verified from the new location: go build + go vet + go test green; pnpm build green; full pnpm tauri:build from desktop/ produced desktop/src-tauri/target/release/bundle/macos/Cairn.app with the embedded sidecar; launched it — spawns the server, /healthz ok, embedded UI served, MCP initialize returns serverInfo cairn, sidecar dies on quit. grep confirms zero remaining web/src-tauri references. Local DMG step still fails only due to headless Finder/AppleScript (CI macos-14 has a GUI). Branch feat/desktop-tauri still uncommitted.
