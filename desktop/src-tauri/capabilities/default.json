@@ -21,6 +21,7 @@
     "autostart:allow-enable",
     "autostart:allow-disable",
     "autostart:allow-is-enabled",
+    "allow-update-tray",
     {
       "identifier": "shell:allow-spawn",
       "allow": [{ "name": "binaries/cairn", "sidecar": true }]
