@@ -8,14 +8,27 @@ import { timeAgo } from "@/lib/utils";
 import {
   checkForUpdate,
   dndEnabled,
+  onDeepLink,
   onDesktopEvent,
   onTrayEvent,
+  openDeepLink,
   setDnd,
   updateTray,
   type DesktopEvent,
   type TrayItem,
   type TrayMenuModel,
 } from "@/lib/desktop";
+
+// useDeepLinks routes cairn:// opens (from the OS) to the right task/project.
+export function useDeepLinks() {
+  useEffect(() => {
+    let off = () => {};
+    void onDeepLink(openDeepLink).then((fn) => {
+      off = fn;
+    });
+    return () => off();
+  }, []);
+}
 
 export type TrayHandlers = {
   openTask: (id: string) => void;

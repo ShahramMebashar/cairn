@@ -18,6 +18,7 @@
     "notification:default",
     "updater:default",
     "process:allow-restart",
+    "deep-link:default",
     "autostart:allow-enable",
     "autostart:allow-disable",
     "autostart:allow-is-enabled",

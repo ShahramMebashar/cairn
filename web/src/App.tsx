@@ -16,7 +16,7 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { CaptureView } from "@/components/CaptureView";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { useStatus, useTaskEvents } from "@/lib/queries";
-import { useDesktopMenu, useTrayMenu, useUpdater } from "@/lib/desktop-hooks";
+import { useDeepLinks, useDesktopMenu, useTrayMenu, useUpdater } from "@/lib/desktop-hooks";
 import { isTauri, pickFolder } from "@/lib/tauri";
 import {
   forget,
@@ -115,6 +115,7 @@ function useRoute(): Route {
 
 function Flow() {
   const route = useRoute();
+  useDeepLinks(); // route cairn:// opens (desktop only; no-op in the browser)
 
   const open = (path: string) => {
     window.location.hash = hashFor(registerWorkspace(path), { kind: "list", filter: "all" });

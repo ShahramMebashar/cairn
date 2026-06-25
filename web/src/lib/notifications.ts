@@ -99,7 +99,7 @@ export function useNotifications(path: string, actor?: string) {
       // (desktop only; no-op in the browser). Avoids double-signalling the visible bell.
       if (!document.hasFocus()) {
         for (const n of fresh) {
-          if (n.kind !== "blocked") void notify("Cairn", n.text);
+          if (n.kind !== "blocked") void notify("Cairn", n.text, { path, id: n.taskId });
         }
       }
     }

@@ -34,8 +34,15 @@ pub fn run() {
     // window instead of spawning a duplicate sidecar (which would fight for the port).
     #[cfg(desktop)]
     {
-        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             show_main(app);
+            // On Windows/Linux a cairn:// open while running arrives as a CLI arg to this
+            // second instance — forward it to the UI.
+            for arg in &argv {
+                if arg.starts_with("cairn://") {
+                    let _ = app.emit("deep-link", arg.clone());
+                }
+            }
         }));
     }
 
@@ -49,6 +56,7 @@ pub fn run() {
             })
             .build())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_shell::init())
@@ -85,6 +93,21 @@ pub fn run() {
             {
                 use tauri_plugin_global_shortcut::GlobalShortcutExt;
                 let _ = app.global_shortcut().register(CAPTURE_SHORTCUT);
+            }
+
+            // Deep links (cairn://): forward OS opens to the UI. register_all() is best-effort
+            // for Linux/Windows runtime registration; macOS uses the bundled Info.plist scheme.
+            #[cfg(desktop)]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                let _ = app.deep_link().register_all();
+                let dh = app.handle().clone();
+                app.deep_link().on_open_url(move |event| {
+                    for url in event.urls() {
+                        show_main(&dh);
+                        let _ = dh.emit("deep-link", url.to_string());
+                    }
+                });
             }
 
             // Close-to-tray (prod only): the X hides the window so the server + MCP stay

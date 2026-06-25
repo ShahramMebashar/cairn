@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { mcpAddCommand } from "@/lib/connect";
 
 // ConnectAgentDialog shows ready-to-paste MCP connection details for the open project.
 // HTTP targets the running app's /mcp endpoint (this same server); stdio points an
@@ -28,8 +29,7 @@ export function ConnectAgentDialog({
   // The webview origin is the cairn server in the packaged app; falls back gracefully.
   const base = typeof window !== "undefined" ? window.location.origin : "http://127.0.0.1:7777";
   const who = actor || "agent:claude-1";
-  const httpUrl = `${base}/mcp?repo=${encodeURIComponent(path)}&actor=${encodeURIComponent(who)}`;
-  const httpCmd = `claude mcp add --transport http cairn "${httpUrl}"`;
+  const httpCmd = mcpAddCommand(base, path, who);
   const stdioJson = JSON.stringify(
     { mcpServers: { cairn: { command: "cairn", args: ["serve", "--actor", who, "--repo", path] } } },
     null,
