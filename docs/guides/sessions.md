@@ -1,4 +1,8 @@
-# Agent sessions
+---
+title: Sessions
+---
+
+# Sessions
 
 Agent sessions make work observable without turning an agent's self-report into proof.
 Each attempt links a task to an actor, client/model, heartbeat, Git context, and final
@@ -46,6 +50,11 @@ they report.
 }
 ```
 
+::: tip
+For how sessions fit the end-to-end workflow, see [The agent loop](/guides/agent-loop).
+Tool parameters live in the [MCP tools reference](/reference/mcp-tools).
+:::
+
 ## Supervision states
 
 Workflow status and execution state are separate:
@@ -72,7 +81,7 @@ heartbeat timestamps remain in local live files rather than durable records.
 
 ## Trust boundary
 
-`finish` means “the agent has stopped and supplied a review handoff.” It does not mean the
+`finish` means "the agent has stopped and supplied a review handoff." It does not mean the
 work is correct. Checks and explicit workflow closure remain separate. A later trust-loop
 slice will bind check evidence to a Git tree snapshot and invalidate stale results; until
 then, the existing check gate remains authoritative.

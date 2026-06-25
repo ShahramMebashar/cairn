@@ -1,0 +1,29 @@
+id: ses_6de3a97b7e1be6c7dc1fa08a
+task: PROJ-2ap9rwb34x
+attempt: att_6de3a97b7e1be6c7dc1fa08a
+actor: agent:claude
+client: claude
+status: finished
+idempotency_key: docs-vitepress-2026-06-25
+started_at: 2026-06-25T13:05:39.706979Z
+branch: main
+ended_at: 2026-06-25T13:13:50Z
+summary: |-
+  Built a full VitePress documentation site under docs/, modeled on the parakit project.
+
+  Structure (docs/):
+  - .vitepress/config.mts — title/description, base '/cairn/', cleanUrls, lastUpdated, local search, GitHub editLink + social, Guide/Agents/Reference nav + grouped sidebar.
+  - package.json (vitepress ^1.6.4, dev/build/preview), .gitignore for dist/cache/node_modules.
+  - Home (index.md, layout: home) — hero, feature cards, supported-agents table.
+  - Getting started: introduction, installation, quickstart.
+  - Core concepts (guides/): task-files, agent-loop, sessions, checks-and-gates.
+  - Agents: overview (agents/index.md) + one page each for claude, cursor, codex, windsurf, opencode, kilo, pi, antigravity. Per-agent config snippets are the EXACT output captured live from GET /api/connect/<agent>/manual, so they match the registry (internal/connect/registry.go).
+  - Reference: cli, mcp-tools, http-api, events — sourced from cmd/cairn/main.go and internal/server/{server,connect,events}.go.
+
+  Migrated the six old flat docs into the new tree and removed them (getting-started, connect-claude, agent-sessions, mcp-tools, task-files, README) — confirmed nothing outside docs/ referenced them.
+
+  Deploy: .github/workflows/docs.yml builds VitePress and deploys to GitHub Pages on push to main (Node 22, fetch-depth 0 for lastUpdated).
+
+  Verification: `npm --prefix docs run build` is clean — VitePress's dead-internal-link check passes (would fail the build otherwise). The no-stale-reference rg check passes. Bulk content authored by 3 parallel subagents from exact data; spot-checked agents/codex.md and reference/http-api.md for accuracy.
+
+  Review notes / follow-ups: (1) Manual check still open — a human should skim the 8 agent pages once. (2) One-time repo setting required before the site goes live: Settings → Pages → Source = "GitHub Actions". (3) Site will publish at https://shahrammebashar.github.io/cairn/. (4) Optional: add a docs link to the root README and run `npm --prefix docs run dev` for a local visual pass.

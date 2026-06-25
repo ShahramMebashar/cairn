@@ -1,3 +1,7 @@
+---
+title: Task files & config
+---
+
 # Task files & config
 
 ## File layout
@@ -110,6 +114,11 @@ Transitions are free — any state to any state — except two gates:
 
 Reopening a closed task is allowed; check results are **not** reset on reopen — they keep
 their last value, so a re-close reuses them.
+
+::: tip
+For the full gates + checks model — including manual checks, exit codes, and run logs — see
+[Checks & gates](/guides/checks-and-gates).
+:::
 
 ## Checks
 

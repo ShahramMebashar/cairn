@@ -1,3 +1,7 @@
+---
+title: MCP tools
+---
+
 # MCP tools
 
 Every verb is a thin adapter over the same rule-set in `internal/task`. Identity is fixed
@@ -134,6 +138,8 @@ All other transitions are free (any state → any state, including reopening a c
 > Closing can block up to the checks' timeout — that latency is intentional; closing is
 > exactly when verification belongs.
 
+See [Checks and gates](/guides/checks-and-gates) for the full gate model.
+
 ## run_checks
 
 Run a task's `cmd` checks and record results, without transitioning. By default runs all;
@@ -171,4 +177,4 @@ does **not** close the task: workflow completion still requires passing checks a
 explicit `transition`. `cancel` ends only the session, releases the assignment, and leaves
 the task open.
 
-See [Agent sessions](agent-sessions.md) for schemas, examples, health derivation, and storage.
+See [Sessions](/guides/sessions) for schemas, examples, health derivation, and storage.
