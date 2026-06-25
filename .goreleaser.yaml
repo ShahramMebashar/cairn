@@ -1,0 +1,37 @@
+version: 2
+
+# Ships the standalone `cairn` binary (CLI + MCP server + web UI, with the UI embedded).
+# The desktop app is built separately by the per-OS jobs in .github/workflows/release.yml.
+
+before:
+  hooks:
+    # Build the web UI so it's embedded into the binary (web/embed.go //go:embed all:dist).
+    - sh -c "cd web && pnpm install --frozen-lockfile && pnpm run build"
+    - go mod tidy
+
+builds:
+  - id: cairn
+    main: ./cmd/cairn
+    binary: cairn
+    env: [CGO_ENABLED=0]
+    ldflags: ["-s -w -X main.version={{.Version}}"]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+
+archives:
+  - id: cairn
+    ids: [cairn]
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  draft: false
+  # Attach the installer so `releases/latest/download/install.sh` always serves it.
+  extra_files:
+    - glob: ./install.sh

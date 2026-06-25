@@ -33,6 +33,9 @@ import (
 	"cairn/internal/store"
 )
 
+// version is injected at release time via -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "cairn:", err)
@@ -52,10 +55,13 @@ func run(args []string) error {
 		return runServe(rest)
 	case "web":
 		return runWeb(rest)
+	case "version", "--version", "-v":
+		fmt.Println("cairn", version)
+		return nil
 	case "-h", "--help", "help":
 		return usage()
 	default:
-		return fmt.Errorf("unknown command %q (want init, serve, or web)", cmd)
+		return fmt.Errorf("unknown command %q (want init, serve, web, or version)", cmd)
 	}
 }
 
@@ -66,6 +72,7 @@ func usage() error {
   cairn serve [--actor agent:claude-1] [--client claude] [--repo .]
                                                     MCP server over stdio (auto-inits)
   cairn web   [--addr :8080] [--repo .]             HTTP server for the web UI
+  cairn version                                     print the version and exit
 `)
 	return nil
 }

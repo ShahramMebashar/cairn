@@ -3,6 +3,7 @@ package check
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -29,6 +30,57 @@ func TestRunPass(t *testing.T) {
 	}
 	if _, err := os.Stat(res.LogPath); err != nil {
 		t.Fatalf("log not written: %v", err)
+	}
+}
+
+func TestRunMissingShellIsClearError(t *testing.T) {
+	t.Setenv("CAIRN_SHELL", "cairn-no-such-shell-xyz")
+	_, err := runner(t).Run("PROJ-001", Spec{Cmd: "exit 0"})
+	if err == nil {
+		t.Fatal("expected an error when the shell is missing")
+	}
+	if !strings.Contains(err.Error(), "CAIRN_SHELL") {
+		t.Errorf("error should mention CAIRN_SHELL, got: %v", err)
+	}
+}
+
+func TestRunUsesConfiguredShellWhenEnvUnset(t *testing.T) {
+	t.Setenv("CAIRN_SHELL", "") // env unset → fall through to Runner.Shell
+	r := runner(t)
+	r.Shell = "cairn-no-such-shell-xyz"
+	_, err := r.Run("PROJ-001", Spec{Cmd: "exit 0"})
+	if err == nil || !strings.Contains(err.Error(), "cairn-no-such-shell-xyz") {
+		t.Fatalf("expected the configured shell to be used, got: %v", err)
+	}
+}
+
+func TestEnvShellOverridesConfiguredShell(t *testing.T) {
+	sh, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skip("no sh on PATH")
+	}
+	t.Setenv("CAIRN_SHELL", sh) // env wins over a bogus configured shell
+	r := runner(t)
+	r.Shell = "cairn-no-such-shell-xyz"
+	res, err := r.Run("PROJ-001", Spec{Cmd: "exit 0"})
+	if err != nil || !res.Pass {
+		t.Fatalf("env shell should win; got res=%+v err=%v", res, err)
+	}
+}
+
+func TestRunHonorsCairnShell(t *testing.T) {
+	// Point CAIRN_SHELL at the real sh by absolute path; checks must still run.
+	sh, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skip("no sh on PATH")
+	}
+	t.Setenv("CAIRN_SHELL", sh)
+	res, err := runner(t).Run("PROJ-001", Spec{Cmd: "exit 0"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !res.Pass {
+		t.Fatalf("got %+v, want pass", res)
 	}
 }
 

@@ -71,6 +71,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/status", s.handleStatus)
 	mux.HandleFunc("GET /api/identity", s.handleIdentity)
 	mux.HandleFunc("POST /api/init", s.handleInit)
+	mux.HandleFunc("POST /api/config", s.handleSetConfig)
 	mux.HandleFunc("GET /api/tasks", s.handleList)
 	mux.HandleFunc("POST /api/tasks", s.handleCreate)
 	mux.HandleFunc("GET /api/tasks/{id}", s.handleGet)
@@ -267,6 +268,48 @@ func (s *Server) handleInit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := repo.Init(root, req.Prefix); err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.status(root))
+}
+
+type configReq struct {
+	// CheckShell is a pointer so an omitted field is left unchanged, while "" clears it
+	// (back to the default sh). Other config fields aren't editable over HTTP yet.
+	CheckShell *string `json:"checkShell"`
+}
+
+// handleSetConfig edits the workspace's config.yaml. It loads the current config, applies the
+// provided fields, and saves — so it never clobbers unrelated settings.
+func (s *Server) handleSetConfig(w http.ResponseWriter, r *http.Request) {
+	var req configReq
+	if !decode(w, r, &req) {
+		return
+	}
+	root, err := s.resolveRoot(r.URL.Query().Get("path"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errBody(err))
+		return
+	}
+	st := store.New(root)
+	cfg, err := st.Config()
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if req.CheckShell != nil {
+		// A shell can be a path with spaces; only trim ends and drop newlines.
+		shell := strings.TrimSpace(*req.CheckShell)
+		shell = strings.Map(func(r rune) rune {
+			if r == '\n' || r == '\r' || r == '\t' {
+				return -1
+			}
+			return r
+		}, shell)
+		cfg.CheckShell = shell
+	}
+	if err := st.SaveConfig(cfg); err != nil {
 		writeErr(w, err)
 		return
 	}
@@ -594,6 +637,7 @@ func (s *Server) status(root string) statusResp {
 			resp.Closed = cfg.Closed
 			resp.Initial = cfg.Initial
 			resp.Review = cfg.Review()
+			resp.CheckShell = cfg.CheckShell
 		}
 	}
 	return resp
@@ -610,6 +654,7 @@ type statusResp struct {
 	Closed          []string `json:"closed,omitempty"`
 	Initial         string   `json:"initial,omitempty"`
 	Review          string   `json:"review,omitempty"`
+	CheckShell      string   `json:"checkShell,omitempty"`
 	Actor           string   `json:"actor"`
 	SuggestedActor  string   `json:"suggestedActor"`
 }

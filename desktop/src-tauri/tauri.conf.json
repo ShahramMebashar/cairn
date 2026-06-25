@@ -5,7 +5,7 @@
   "identifier": "com.shaho.cairn",
   "build": {
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "pnpm --dir ../web dev",
+    "beforeDevCommand": "node ../scripts/build-sidecar.mjs && pnpm --dir ../web dev",
     "beforeBuildCommand": "pnpm --dir ../web build && node ../scripts/build-sidecar.mjs",
     "frontendDist": "../../web/dist"
   },
@@ -32,7 +32,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["dmg", "app"],
+    "targets": ["app", "dmg", "nsis", "deb", "appimage"],
     "createUpdaterArtifacts": true,
     "externalBin": ["binaries/cairn"],
     "icon": [

@@ -1,14 +1,1 @@
-{
-  "mcpServers": {
-    "cairn": {
-      "args": [
-        "serve",
-        "--actor",
-        "agent:claude",
-        "--repo",
-        "/Users/shaho/Projects/cairn"
-      ],
-      "command": "/Users/shaho/Projects/cairn/bin/cairn"
-    }
-  }
-}
+{}

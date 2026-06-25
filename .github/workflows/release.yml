@@ -12,28 +12,49 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  GO_VERSION: "1.25"
+  GO_VERSION: "1.25.5"
   NODE_VERSION: "22"
 
-# Unsigned (no Apple/Windows code signing) MVP, but the *updater* artifacts ARE signed with
-# our Tauri update key so in-app auto-update works. tauri-action builds each platform, uploads
-# installers to the GitHub Release, and generates/merges latest.json (the updater feed).
-# Requires repo secrets: TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD.
 jobs:
-  desktop:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: macos-14
-            args: "--target aarch64-apple-darwin"
-          - platform: macos-14
-            args: "--target x86_64-apple-darwin"
-          - platform: ubuntu-24.04
-            args: ""
-          - platform: windows-latest
-            args: ""
-    runs-on: ${{ matrix.platform }}
+  # Standalone `cairn` binary (CLI + MCP server + embedded web UI): cross-platform archives,
+  # checksums, and install.sh, published to the GitHub Release via GoReleaser.
+  release:
+    name: GoReleaser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: check
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Desktop installers (Tauri), one job per OS on a native runner, uploaded to the same
+  # release the GoReleaser job created. Updater .sig artifacts are signed with the Tauri key.
+  desktop-macos:
+    name: Desktop macOS
+    runs-on: macos-14
+    needs: release
+    env:
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -43,15 +64,66 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-          cache-dependency-path: |
-            web/pnpm-lock.yaml
-            desktop/pnpm-lock.yaml
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ contains(matrix.platform, 'macos') && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - run: pnpm install --frozen-lockfile
+        working-directory: web
+      - run: pnpm install --frozen-lockfile
+        working-directory: desktop
+      - name: Set desktop version from tag
+        run: node scripts/set-desktop-version.mjs "$GITHUB_REF_NAME"
+      # --- Optional Apple signing + notarization (only runs when secrets are present) ---
+      - name: Write Apple notarization API key
+        if: env.APPLE_CERTIFICATE != ''
+        env:
+          APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$APPLE_API_KEY_CONTENT" > "$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
+          chmod 600 "$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
+      - name: Build macOS desktop app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_PATH: ${{ runner.temp }}/AuthKey_${{ secrets.APPLE_API_KEY_ID }}.p8
+        run: pnpm tauri:build -- --bundles dmg,app
+        working-directory: desktop
+      - name: Generate desktop checksums
+        run: |
+          set -euo pipefail
+          find desktop/src-tauri/target/release/bundle -type f \( -name '*.dmg' -o -name '*.app.tar.gz' -o -name '*.app.tar.gz.sig' \) -print0 \
+            | xargs -0 shasum -a 256 > desktop-macos-checksums.txt
+      - name: Upload desktop artifacts to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            desktop/src-tauri/target/release/bundle/dmg/*.dmg
+            desktop/src-tauri/target/release/bundle/macos/*.app.tar.gz*
+            desktop-macos-checksums.txt
+
+  desktop-linux:
+    name: Desktop Linux
+    runs-on: ubuntu-24.04
+    needs: release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: dtolnay/rust-toolchain@stable
       - name: Install Linux Tauri dependencies
-        if: matrix.platform == 'ubuntu-24.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -64,20 +136,62 @@ jobs:
       - run: pnpm install --frozen-lockfile
         working-directory: desktop
       - name: Set desktop version from tag
-        run: node scripts/set-desktop-version.mjs "${{ github.ref_name }}"
-      - uses: tauri-apps/tauri-action@v0
+        run: node scripts/set-desktop-version.mjs "$GITHUB_REF_NAME"
+      - name: Build Linux desktop app
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Signs the updater artifacts + generates latest.json. (Apple/Windows code
-          # signing is still TODO — add APPLE_*/Windows cert secrets later.)
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm tauri:build -- --bundles appimage,deb
+        working-directory: desktop
+      - name: Generate desktop checksums
+        run: |
+          set -euo pipefail
+          find desktop/src-tauri/target/release/bundle -type f \( -name '*.AppImage' -o -name '*.deb' \) -print0 \
+            | xargs -0 shasum -a 256 > desktop-linux-checksums.txt
+      - name: Upload desktop artifacts to release
+        uses: softprops/action-gh-release@v2
         with:
-          projectPath: desktop
-          tagName: ${{ github.ref_name }}
-          releaseName: "Cairn ${{ github.ref_name }}"
-          releaseBody: "Download the installer for your OS below. Existing installs auto-update."
-          releaseDraft: false
-          prerelease: false
-          includeUpdaterJson: true
-          args: ${{ matrix.args }}
+          files: |
+            desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+            desktop/src-tauri/target/release/bundle/deb/*.deb
+            desktop-linux-checksums.txt
+
+  desktop-windows:
+    name: Desktop Windows
+    runs-on: windows-latest
+    needs: release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: dtolnay/rust-toolchain@stable
+      - run: pnpm install --frozen-lockfile
+        working-directory: web
+      - run: pnpm install --frozen-lockfile
+        working-directory: desktop
+      - name: Set desktop version from tag
+        run: node scripts/set-desktop-version.mjs "${{ github.ref_name }}"
+      - name: Build Windows desktop app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm tauri:build -- --bundles nsis
+        working-directory: desktop
+      - name: Generate desktop checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem desktop/src-tauri/target/release/bundle -Recurse -Include *.exe |
+            Get-FileHash -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLower())  $($_.Path)" } |
+            Set-Content desktop-windows-checksums.txt
+      - name: Upload desktop artifacts to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            desktop/src-tauri/target/release/bundle/nsis/*.exe
+            desktop-windows-checksums.txt

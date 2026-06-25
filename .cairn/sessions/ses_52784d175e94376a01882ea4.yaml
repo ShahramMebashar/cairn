@@ -1,0 +1,30 @@
+id: ses_52784d175e94376a01882ea4
+task: PROJ-2apbf857vy
+attempt: att_52784d175e94376a01882ea4
+actor: agent:claude
+client: claude
+status: finished
+idempotency_key: cross-os-bundle-2026-06-25
+started_at: 2026-06-25T13:34:39.018358Z
+branch: main
+ended_at: 2026-06-25T13:41:04Z
+summary: |-
+  Completed cross-OS desktop bundling for macOS, Windows, and Linux. The release matrix already had all three OSes, but two things meant it couldn't actually ship installers everywhere — and one was a real Windows port.
+
+  Config fixes:
+  - tauri.conf.json: bundle.targets ["dmg","app"] (macOS-only) → ["app","dmg","nsis","deb","appimage"], so Windows (NSIS) and Linux (deb + AppImage) bundle.
+  - scripts/build-sidecar.mjs: now derives GOOS/GOARCH (+ CGO_ENABLED=0) from the Tauri target triple. It previously named the Go binary per-triple but compiled for the host arch — so the x86_64-apple-darwin bundle built on an arm64 runner would embed an arm64 binary.
+  - release.yml: added workflow_dispatch (build-only smoke test); version stamping + release publish are now guarded to tag pushes (empty tagName ⇒ tauri-action builds without publishing).
+
+  Windows port (cairn's Go code didn't compile on Windows):
+  - internal/store: split flock behind build tags — flock_unix.go (unix.Flock) and flock_windows.go (LockFileEx/UnlockFileEx), sharing a portable errWouldBlock; lock.go calls lockExclusiveNB/unlock.
+  - internal/check: split the timeout killer — kill_unix.go (Setpgid + SIGKILL to the process group) and kill_windows.go (Process.Kill); check.go calls configureKill.
+  - go mod tidy promoted go-toml/v2 to a direct dependency.
+
+  Verification: `go build ./...` clean for GOOS=windows/linux/darwin (amd64); `make check` green; the sidecar cross-compiles to correct-arch binaries (Mach-O x86_64, ELF x86-64, PE32+ x86-64 — the Windows case failed before this change).
+
+  Follow-ups / notes:
+  - Checks still run via `sh -c`, so Windows users need Git Bash or WSL on PATH (already stated in the check package doc and getting-started/installation). The Windows timeout kill is process-only (no group), bounded by WaitDelay — acceptable for v1.
+  - Code signing (Apple notarization, Windows cert) is still TODO; only the updater artifacts are signed. Unsigned installers will warn on first launch.
+  - To smoke-test the full matrix now: run the "release" workflow via workflow_dispatch (no tag needed). To publish: push a tag like v0.1.0. Requires repo secrets TAURI_SIGNING_PRIVATE_KEY (+ password), already referenced.
+  - The manual check (a tagged release yields installers for all three OSes) is best closed after the first dispatch/tag run is observed green in CI.

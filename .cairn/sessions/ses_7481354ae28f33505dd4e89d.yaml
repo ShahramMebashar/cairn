@@ -1,0 +1,26 @@
+id: ses_7481354ae28f33505dd4e89d
+task: PROJ-2apddeedrp
+attempt: att_7481354ae28f33505dd4e89d
+actor: agent:claude
+client: claude
+status: finished
+idempotency_key: check-shell-setting-2026-06-25
+started_at: 2026-06-25T14:07:48.771637Z
+branch: main
+ended_at: 2026-06-25T14:14:06Z
+summary: |-
+  Added a real "Check shell" setting in the UI, backed by config.yaml — so the shell is no longer env-only.
+
+  Backend:
+  - config.Config gains CheckShell (`yaml:"check_shell,omitempty"`).
+  - check.Runner gains a Shell field; resolveShell is now a method with precedence CAIRN_SHELL env → Runner.Shell (config) → `sh`. service.go's runCmdChecks passes Shell: cfg.CheckShell.
+  - store.SaveConfig(cfg) validates then writes config.yaml.
+  - server: statusResp gains checkShell; new POST /api/config { checkShell } load-modify-saves config (pointer field — omitted leaves it unchanged, "" clears back to sh; trims ends and strips newlines but preserves internal spaces so shell paths like "C:\\Program Files\\Git\\bin\\sh.exe" survive).
+
+  Frontend:
+  - api.Status.checkShell + setCheckShell(path, shell); useSetCheckShell hook updates the status cache and toasts.
+  - SettingsDialog now shows an always-visible "Check shell" input (text field + dirty-gated Save) above the desktop-only toggles; description notes empty=sh, Windows uses Git Bash/WSL, and CAIRN_SHELL overrides. App.tsx passes path + status.checkShell.
+
+  Tests: TestRunUsesConfiguredShellWhenEnvUnset, TestEnvShellOverridesConfiguredShell. make check + pnpm web build green. Live `cairn web`: POST checkShell=bash → status.checkShell=bash and config.yaml shows `check_shell: bash`; clearing removes the key.
+
+  Where it is now: workspace dropdown → Settings… → "Check shell". Precedence at run time: CAIRN_SHELL env (one-off) > this setting (persisted per repo) > sh. The Help dialog's "Checks run a shell" card still explains the concept. Manual check (Settings shows + persists) verified via the API end-to-end; a human can confirm the dialog visually after a rebuild.

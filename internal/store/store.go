@@ -97,6 +97,15 @@ func (s *Store) RunsDir() string { return filepath.Join(s.root, ".cairn", "runs"
 // Config loads config.yaml fresh (read-fresh, SPEC §8).
 func (s *Store) Config() (config.Config, error) { return config.Load(s.configPath()) }
 
+// SaveConfig validates and writes config.yaml. Engine-owned and small, so a struct
+// round-trip is fine (unlike task files, which need node-level writes).
+func (s *Store) SaveConfig(c config.Config) error {
+	if err := c.Validate(); err != nil {
+		return err
+	}
+	return config.Save(s.configPath(), c)
+}
+
 // Provenance is one audit entry (SPEC §2, §7). System entries (created/transitioned/...)
 // are append-only; note entries (Did=="note") carry a stable ID so they can be edited or
 // deleted in place, and EditedAt records the last edit.

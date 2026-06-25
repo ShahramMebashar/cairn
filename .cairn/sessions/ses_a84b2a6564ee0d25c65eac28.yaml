@@ -1,0 +1,22 @@
+id: ses_a84b2a6564ee0d25c65eac28
+task: PROJ-2apcrfqnve
+attempt: att_a84b2a6564ee0d25c65eac28
+actor: agent:claude
+client: claude
+status: finished
+idempotency_key: cairn-shell-2026-06-25
+started_at: 2026-06-25T13:56:38.028884Z
+branch: main
+ended_at: 2026-06-25T13:59:33Z
+summary: |-
+  Made the check shell resolvable with a clear error, and documented it in code, the docs site, and the in-app guide.
+
+  Backend (internal/check/check.go): new resolveShell() reads CAIRN_SHELL (default `sh`), preflights it with exec.LookPath, and returns a single actionable error — `check: shell "sh" not found on PATH — install a POSIX shell (Git Bash or WSL on Windows) or set CAIRN_SHELL to one` — instead of a cryptic per-check "exec: sh not found". RunContext now runs `<resolved-shell> -c`. Default stays `sh`, so the SPEC §6 contract is unchanged. Tests added: TestRunMissingShellIsClearError, TestRunHonorsCairnShell.
+
+  In-app guide (web/src/components/HelpDialog.tsx): new "Checks run a shell" section (Terminal icon) explaining command checks run in a POSIX shell and that Windows needs Git Bash/WSL or CAIRN_SHELL.
+
+  Docs: guides/checks-and-gates.md got a "## The shell" section (per-OS guidance, CAIRN_SHELL, the exact error text, and a write-portable-commands tip); installation.md's POSIX-shell requirement now links it; reference/cli.md gained an Environment variables table documenting CAIRN_SHELL.
+
+  Verification: make check green (incl. the two new tests), docs build clean, web build clean.
+
+  Net: checks compile and run on macOS/Linux/Windows; on Windows they need a POSIX sh (Git Bash/WSL) or CAIRN_SHELL — now with a clear failure and three places that say so. POSIX-only-by-design is preserved (no cmd/PowerShell fork that would fragment check semantics).

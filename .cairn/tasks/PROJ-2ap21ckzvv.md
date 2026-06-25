@@ -1,7 +1,7 @@
 ---
 id: PROJ-2ap21ckzvv
 title: Add Connect page with one-click agent auto-config
-status: in_review
+status: done
 priority: high
 checks:
   - desc: Go build, vet, and tests pass
@@ -14,7 +14,7 @@ checks:
     result: pass
   - desc: 'End-to-end: Connect page writes a valid agent config and flips to Connected'
     type: manual
-    result: pending
+    result: pass
 provenance:
   - {who: 'agent:claude', at: '2026-06-25T10:53:32Z', did: created}
   - {who: 'agent:claude', at: '2026-06-25T10:53:37Z', did: began session ses_fde7b1192ee82f7f2d8feb77}
@@ -31,6 +31,9 @@ provenance:
   - {who: 'agent:claude', at: '2026-06-25T12:06:05Z', did: began session ses_ba386bc76686674c3b2b6bc0}
   - {id: n_ghtc2per, who: 'agent:claude', at: '2026-06-25T12:08:43Z', did: note, text: 'Added Disconnect (remove cairn from an agent''s config). Backend: format.remove(existing) on each adapter drops only the `cairn` key (jsonNestedDelete for JSON shapes — also prunes an emptied mcpServers/mcp map; codexTOML prunes an emptied mcp_servers table). connect.Disconnect(agentID, repo): no-op if file absent/not-connected, else atomic write + .bak + verify-gone. Endpoint DELETE /api/connect/{agent}. Frontend: useDisconnectAgent hook; connected cards show an Unplug ghost icon-button next to Reconnect (destructive hover) that disconnects and invalidates detection so the card flips back. Tests TestDisconnectRemovesOnlyCairnAndKeepsSiblings + TestDisconnectMissingFileIsNoop. Live-verified: connect added cairn beside a sibling `other` server, disconnect removed only cairn (kept `other`), wrote .bak, detection→connected:false. make check + web build green.'}
   - {who: 'agent:claude', at: '2026-06-25T12:08:57Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-25T13:40:36Z', did: attested, text: check 2 pass}
+  - {who: 'human:shaho', at: '2026-06-25T13:40:48Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-25T13:40:48Z', did: transitioned to done}
 assignee: agent:claude
 active_attempt: att_ba386bc76686674c3b2b6bc0
 ---

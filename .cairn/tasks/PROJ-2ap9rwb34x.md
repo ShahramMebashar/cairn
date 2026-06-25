@@ -1,7 +1,7 @@
 ---
 id: PROJ-2ap9rwb34x
 title: Build VitePress documentation site (mirroring parakit)
-status: in_review
+status: done
 priority: high
 checks:
   - desc: VitePress build is clean (no dead internal links)
@@ -14,7 +14,7 @@ checks:
     result: pass
   - desc: 'Manual: agent pages reviewed for accuracy vs live /api/connect manual output'
     type: manual
-    result: pending
+    result: pass
 provenance:
   - {who: 'agent:claude', at: '2026-06-25T13:05:32Z', did: created}
   - {who: 'agent:claude', at: '2026-06-25T13:05:39Z', did: began session ses_6de3a97b7e1be6c7dc1fa08a}
@@ -24,6 +24,9 @@ provenance:
   - {who: 'agent:claude', at: '2026-06-25T13:18:31Z', did: began session ses_42980a7c02f8551da745827c}
   - {who: 'agent:claude', at: '2026-06-25T13:20:01Z', did: ran checks}
   - {id: n_g0qge0t2, who: 'agent:claude', at: '2026-06-25T13:20:13Z', did: note, text: 'Added branding + desktop-app docs. Logo: copied web/public/favicon.svg → docs/public/logo.svg (vivid #863bff mark, theme-safe on light+dark; the desktop cairn-logo.svg uses dark fills that vanish on a dark navbar). Wired as themeConfig.logo (nav), hero.image (index.md), and the head favicon (/cairn/logo.svg with base). Desktop app: new "## Desktop app" section in installation.md framed as the easy path — `make desktop` (Tauri installer, embeds UI + cairn sidecar) and `make desktop-dev`, with a placeholder ::: warning that prebuilt signed installers aren''t published yet (build from source until the first tagged release lands on Releases + auto-updates). Renamed "## Build" → "## Build the binary"; added a 5th home feature card ("Run it however you like"); noted Node/Rust requirements. Build clean; logo.svg published to dist and referenced.'}
+  - {who: 'human:shaho', at: '2026-06-25T13:40:24Z', did: attested, text: check 2 pass}
+  - {who: 'human:shaho', at: '2026-06-25T13:40:30Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-25T13:40:30Z', did: transitioned to done}
 assignee: agent:claude
 active_attempt: att_42980a7c02f8551da745827c
 ---

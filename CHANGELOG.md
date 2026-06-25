@@ -21,6 +21,14 @@ defined in `internal/mcp/sessions.go` (`ServiceVersion`) and `desktop/src-tauri/
     atomically with a `<file>.bak` backup, and the result is verified.
 - **Documentation site** — a VitePress site under `docs/` (guides, per-agent pages, and an
   HTTP/MCP/CLI reference), deployed to GitHub Pages.
+- **Standalone binary distribution.** A `curl … | sh` [`install.sh`](install.sh) and
+  GoReleaser-built archives (`cairn_<os>_<arch>.tar.gz` / `.zip`) for linux/darwin/windows ×
+  amd64/arm64, with `checksums.txt`. New `cairn version` command (the version is injected at
+  release time).
+- **Cross-platform desktop bundles.** The release workflow produces installers for macOS
+  (`.dmg`), Windows (NSIS `.exe`), and Linux (`.deb` + AppImage) in per-OS jobs. The Go sidecar
+  cross-compiles to each target's architecture, and cairn now builds on Windows (platform-split
+  file lock and check-timeout kill).
 - `SECURITY.md` and this changelog.
 
 ## [0.1.0]

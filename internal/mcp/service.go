@@ -412,7 +412,7 @@ func (svc *Service) RunChecksContext(ctx context.Context, id string, only []int)
 // runCmdChecks executes each cmd check (optionally filtered) and records pass/fail on the
 // doc. It mutates but does not save.
 func (svc *Service) runCmdChecks(ctx context.Context, doc *store.Doc, cfg config.Config, only map[int]bool) error {
-	runner := check.Runner{Root: svc.store.Root(), LogDir: svc.store.RunsDir(), Now: svc.now}
+	runner := check.Runner{Root: svc.store.Root(), LogDir: svc.store.RunsDir(), Now: svc.now, Shell: cfg.CheckShell}
 	for i, c := range doc.Task.Checks {
 		if only != nil && !only[i] {
 			continue

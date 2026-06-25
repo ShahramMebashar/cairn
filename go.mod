@@ -6,7 +6,7 @@ require gopkg.in/yaml.v3 v3.0.1
 
 require github.com/fsnotify/fsnotify v1.10.1
 
-require github.com/pelletier/go-toml/v2 v2.4.2 // indirect
+require github.com/pelletier/go-toml/v2 v2.4.2
 
 require (
 	github.com/google/jsonschema-go v0.4.3 // indirect

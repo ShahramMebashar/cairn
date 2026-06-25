@@ -74,3 +74,9 @@ cairn web --addr 127.0.0.1:7777 --repo .
 ```
 
 See the [HTTP API](/reference/http-api) reference for the endpoints this server exposes.
+
+## Environment variables
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `CAIRN_SHELL` | `sh` | Shell used to run a task's `cmd` checks (`<shell> -c "<cmd>"`). Must be on `PATH`; set it on Windows when `sh` isn't available. See [Checks & gates → The shell](/guides/checks-and-gates#the-shell). |

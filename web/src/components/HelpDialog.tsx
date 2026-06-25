@@ -1,4 +1,4 @@
-import { Bot, GitBranch, History, ListChecks } from "lucide-react";
+import { Bot, GitBranch, History, ListChecks, Terminal } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +17,11 @@ const SECTIONS = [
     icon: GitBranch,
     title: "Two gates keep work honest",
     body: "Dependencies: a task can't leave the backlog until everything it depends on is closed. Checks: a task can't be marked done until its checks pass (commands run automatically; manual checks you attest).",
+  },
+  {
+    icon: Terminal,
+    title: "Checks run a shell",
+    body: "A command check runs in a POSIX shell (sh) — go test ./..., pytest -q && ruff check ., ./scripts/verify.sh. On Windows install Git Bash or WSL, or point CAIRN_SHELL at a shell on your PATH.",
   },
   {
     icon: Bot,

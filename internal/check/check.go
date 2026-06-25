@@ -4,9 +4,9 @@
 // Result back. Manual checks (no command) are never passed here.
 //
 // Contract (SPEC §6): every command runs via `sh -c`, so POSIX shell is required;
-// native Windows users use WSL/Git Bash. Exit code 0 is pass, non-zero is fail, a
-// timeout is a (killed) fail. Combined stdout+stderr is tailed to a log under LogDir;
-// the task file keeps only the result.
+// native Windows users use WSL/Git Bash, or set CAIRN_SHELL to a shell on PATH. Exit
+// code 0 is pass, non-zero is fail, a timeout is a (killed) fail. Combined stdout+stderr
+// is tailed to a log under LogDir; the task file keeps only the result.
 package check
 
 import (
@@ -17,7 +17,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -53,6 +52,9 @@ type Runner struct {
 	Root   string
 	LogDir string
 	Now    func() time.Time
+	// Shell is the configured shell (config.yaml check_shell). Empty ⇒ sh. The CAIRN_SHELL
+	// env var overrides it.
+	Shell string
 }
 
 func (r Runner) now() time.Time {
@@ -62,7 +64,26 @@ func (r Runner) now() time.Time {
 	return time.Now()
 }
 
-// Run executes spec via `sh -c`, captures the tail of its output, writes a run log, and
+// resolveShell returns the shell used to run checks, by precedence: the CAIRN_SHELL env var,
+// then the configured Shell, then `sh`. It must be on PATH; a clear, actionable error beats a
+// cryptic per-check "exec: sh not found", especially on Windows where a POSIX shell isn't
+// present by default.
+func (r Runner) resolveShell() (string, error) {
+	shell := os.Getenv("CAIRN_SHELL")
+	if shell == "" {
+		shell = r.Shell
+	}
+	if shell == "" {
+		shell = "sh"
+	}
+	if _, err := exec.LookPath(shell); err != nil {
+		return "", fmt.Errorf("check: shell %q not found on PATH — install a POSIX shell "+
+			"(Git Bash or WSL on Windows) or set CAIRN_SHELL to one: %w", shell, err)
+	}
+	return shell, nil
+}
+
+// Run executes spec via the resolved shell, captures the tail of its output, writes a run log, and
 // reports the result. A non-zero exit or a timeout is a failed Result, not an error; the
 // error return is reserved for infrastructure faults (e.g. the log could not be written).
 func (r Runner) Run(id string, spec Spec) (Result, error) {
@@ -91,12 +112,15 @@ func (r Runner) RunContext(ctx context.Context, id string, spec Spec) (Result, e
 		defer timeoutCancel()
 	}
 
-	cmd := exec.CommandContext(runCtx, "sh", "-c", spec.Cmd)
+	shell, err := r.resolveShell()
+	if err != nil {
+		return Result{}, err
+	}
+	cmd := exec.CommandContext(runCtx, shell, "-c", spec.Cmd)
 	cmd.Dir = dir
-	// Run the command in its own process group so a timeout kills children too, not
-	// just the sh that spawned them.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	// On a timeout/cancel, kill the command and its children, not just the sh that spawned
+	// them. How that's done is OS-specific (POSIX process group vs. plain kill on Windows).
+	configureKill(cmd)
 	cmd.WaitDelay = 2 * time.Second
 
 	out := &tailBuffer{max: TailBytes}

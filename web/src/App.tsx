@@ -327,6 +327,8 @@ function Workspace({
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         onCheckUpdates={() => void checkUpdates(true)}
+        path={path}
+        checkShell={status.checkShell}
       />
     </div>
   );

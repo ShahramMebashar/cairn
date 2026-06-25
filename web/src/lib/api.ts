@@ -100,6 +100,7 @@ export type Status = {
   closed?: string[];
   initial?: string;
   review?: string; // state whose entry runs command checks (alongside closed states)
+  checkShell?: string; // shell for cmd checks; empty ⇒ sh (CAIRN_SHELL env overrides)
   actor?: string;
   suggestedActor?: string;
 };
@@ -137,6 +138,9 @@ export const getStatus = (path: string) =>
 
 export const initRepo = (path: string, prefix?: string) =>
   req<Status>("POST", "/api/init", { path, prefix });
+
+export const setCheckShell = (path: string, checkShell: string) =>
+  req<Status>("POST", `/api/config?path=${enc(path)}`, { checkShell });
 
 export const listTasks = (path: string) =>
   req<{ tasks: Task[] }>("GET", `/api/tasks?path=${enc(path)}`).then((r) => r.tasks ?? []);

@@ -8,8 +8,6 @@ import (
 	"os"
 	"time"
 
-	"golang.org/x/sys/unix"
-
 	"cairn/internal/config"
 	"cairn/internal/task"
 )
@@ -22,6 +20,11 @@ const (
 // ErrLockTimeout is returned when another Cairn process holds the repository write lock
 // beyond the caller's deadline.
 var ErrLockTimeout = errors.New("repository write lock timeout")
+
+// errWouldBlock signals that the exclusive lock is currently held by another process. The
+// platform-specific lockExclusiveNB returns it (wrapping the OS code) so acquireLock can
+// retry. Real faults are returned as-is.
+var errWouldBlock = errors.New("store: write lock held")
 
 // WriteTx is a short, repository-exclusive mutation scope. Long-running work such as
 // command execution must happen before entering a transaction.
@@ -49,7 +52,7 @@ func (s *Store) Write(ctx context.Context, actor, operation string, fn func(*Wri
 	if err := acquireLock(ctx, f); err != nil {
 		return err
 	}
-	defer unix.Flock(int(f.Fd()), unix.LOCK_UN) //nolint:errcheck // closing the fd also releases the lock
+	defer unlock(f) //nolint:errcheck // closing the fd also releases the lock
 
 	if err := writeLockDiagnostic(f, actor, operation); err != nil {
 		return err
@@ -59,11 +62,11 @@ func (s *Store) Write(ctx context.Context, actor, operation string, fn func(*Wri
 
 func acquireLock(ctx context.Context, f *os.File) error {
 	for {
-		err := unix.Flock(int(f.Fd()), unix.LOCK_EX|unix.LOCK_NB)
+		err := lockExclusiveNB(f)
 		if err == nil {
 			return nil
 		}
-		if !errors.Is(err, unix.EWOULDBLOCK) && !errors.Is(err, unix.EAGAIN) {
+		if !errors.Is(err, errWouldBlock) {
 			return fmt.Errorf("store: acquire write lock: %w", err)
 		}
 

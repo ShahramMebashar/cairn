@@ -38,6 +38,30 @@ file.
 - A check **without** a `cmd` is **manual** — its `result` is set by attestation, not
   execution. A pending manual check blocks closing until it's resolved.
 
+## The shell
+
+Command checks run in a **POSIX shell** so a task's `cmd` behaves the same on every machine.
+By default cairn uses `sh`, which must be on your `PATH`:
+
+- **macOS / Linux** — works out of the box.
+- **Windows** — install **Git Bash** or **WSL** (which provide `sh`). A bare `cmd`/PowerShell
+  install has no `sh`.
+- Override the shell with the **`CAIRN_SHELL`** environment variable — set it to a shell on your
+  `PATH` (e.g. an absolute path to `sh`, or `bash`).
+
+If the shell can't be found, cairn fails the run with a clear message rather than a cryptic
+per-check error:
+
+```
+check: shell "sh" not found on PATH — install a POSIX shell (Git Bash or WSL on Windows)
+or set CAIRN_SHELL to one
+```
+
+::: tip Write portable check commands
+Because checks run through `sh`, keep `cmd` lines POSIX (`&&`, `./script.sh`, standard quoting)
+so they pass identically for a teammate on another OS and in CI.
+:::
+
 ## Exit codes, timeout, and output
 
 - Exit code `0` = `pass`, non-zero = `fail`.

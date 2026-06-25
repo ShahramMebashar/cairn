@@ -28,6 +28,7 @@ type Config struct {
 	Closed              []string `yaml:"closed"`
 	Initial             string   `yaml:"initial"`
 	CheckTimeoutDefault int      `yaml:"check_timeout_default"`
+	CheckShell          string   `yaml:"check_shell,omitempty"` // shell for cmd checks; empty ⇒ sh (CAIRN_SHELL env overrides)
 	WorkingState        string   `yaml:"working_state,omitempty"`
 	ReviewState         string   `yaml:"review_state,omitempty"`
 	SessionHeartbeat    int      `yaml:"session_heartbeat_interval,omitempty"`

@@ -127,6 +127,18 @@ export function useInitRepo(path: string) {
   });
 }
 
+export function useSetCheckShell(path: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (checkShell: string) => api.setCheckShell(path, checkShell),
+    onSuccess: (st) => {
+      qc.setQueryData(["status", path], st);
+      toast.success("Check shell saved");
+    },
+    onError: fail,
+  });
+}
+
 export function useCreateTask(path: string) {
   const qc = useQueryClient();
   return useMutation({

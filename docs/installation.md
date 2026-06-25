@@ -8,7 +8,8 @@ title: Installation
 
 - **Go 1.25+** to build the binary.
 - **POSIX shell (`sh`)** to run task checks. macOS and Linux work out of the box; on Windows
-  use WSL or Git Bash.
+  use WSL or Git Bash, or set [`CAIRN_SHELL`](/guides/checks-and-gates#the-shell) to a shell on
+  your `PATH`.
 - **Node 18+** only if you want to build the web UI, the desktop app, or these docs from source.
 - **Rust toolchain** only to build the desktop app (Tauri).
 
@@ -40,7 +41,30 @@ packaging:
 make desktop-dev   # native window against a dev server (run `make web` alongside)
 ```
 
-Prefer the command line or a headless server? Skip the app and use the Go binary directly.
+Prefer the command line or a headless server? Skip the app and use the `cairn` binary directly.
+
+## Install the binary
+
+The fastest way to get the `cairn` CLI/server (the web UI is embedded in it) is the install
+script — it downloads the right prebuilt binary for your OS/arch, verifies its checksum, and
+installs it to `/usr/local/bin` (override with `BINDIR=`):
+
+```sh
+curl -fsSL https://github.com/ShahramMebashar/cairn/releases/latest/download/install.sh | sh
+```
+
+Or download an archive from the [Releases page](https://github.com/ShahramMebashar/cairn/releases)
+— `cairn_<os>_<arch>.tar.gz` (`.zip` on Windows) — verify it against `checksums.txt`, and put
+`cairn` on your `PATH`. Then:
+
+```sh
+cairn version
+cairn web --repo .
+```
+
+::: warning Prebuilt downloads — placeholder
+Released binaries appear once the first version is tagged. Until then, build from source below.
+:::
 
 ## Build the binary
 
