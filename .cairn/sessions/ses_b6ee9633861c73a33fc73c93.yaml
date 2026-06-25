@@ -1,0 +1,23 @@
+id: ses_b6ee9633861c73a33fc73c93
+task: PROJ-2apf7aebwq
+attempt: att_b6ee9633861c73a33fc73c93
+actor: agent:claude
+client: claude
+status: finished
+idempotency_key: desktop-only-release-2026-06-25
+started_at: 2026-06-25T14:38:50.547334Z
+branch: main
+ended_at: 2026-06-25T14:40:45Z
+summary: |-
+  Scoped the release to desktop-only and fixed the pnpm failure.
+
+  - release.yml: removed the GoReleaser job; the workflow is now a single Tauri desktop matrix (macOS arm64+x86_64, Linux, Windows) that creates the release itself and, via tauri-action includeUpdaterJson, publishes the installers plus a signed latest.json. Apple signing + TAURI_SIGNING env unchanged.
+  - Fixed the failing run ("No pnpm version is specified"): added PNPM_VERSION=10 and `with: version: ${{ env.PNPM_VERSION }}` to pnpm/action-setup (the repo root has no packageManager field for the action to infer from).
+  - Deleted .goreleaser.yaml and install.sh.
+  - Docs: removed the curl|sh "Install the binary" section from installation.md (kept Desktop app + Build-from-source); rewrote the CHANGELOG entry to desktop-only. README was already clean.
+
+  The Go binary still exists and is used (cairn web/serve, and embedded as the desktop sidecar) — it's just no longer distributed standalone. Building from source (make build) is unchanged.
+
+  Verified: release.yml parses and references no goreleaser/install.sh; docs build clean.
+
+  To ship: the earlier v0.1.0 run failed on the pnpm step before any release was created, so no assets exist. Commit these changes and move the tag to the new commit (git tag -f v0.1.0 && git push -f origin v0.1.0) — or use a fresh tag — to retrigger. With the TAURI_SIGNING_PRIVATE_KEY secret set, the run will produce signed/notarized macOS + Linux + Windows installers and latest.json. Windows code signing remains deferred.

@@ -14,45 +14,15 @@ concurrency:
 env:
   GO_VERSION: "1.25.5"
   NODE_VERSION: "22"
+  PNPM_VERSION: "10"
 
+# Builds the cairn desktop app (Tauri) for every OS and publishes the installers to a GitHub
+# Release. The Go binary ships embedded as a sidecar — there is no separate binary download.
+# tauri-action generates and merges latest.json (includeUpdaterJson) so the in-app updater has
+# a feed; macOS is signed + notarized when the Apple secrets are present.
 jobs:
-  # Standalone `cairn` binary (CLI + MCP server + embedded web UI): cross-platform archives,
-  # checksums, and install.sh, published to the GitHub Release via GoReleaser.
-  release:
-    name: GoReleaser
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-          cache-dependency-path: web/pnpm-lock.yaml
-      - uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: "~> v2"
-          args: check
-      - uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: "~> v2"
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # Desktop installers (Tauri), built per-OS and attached to the same release. tauri-action
-  # also generates and merges latest.json across the matrix (includeUpdaterJson) so the in-app
-  # auto-updater has a feed. macOS is signed + notarized when the Apple secrets are present.
   desktop:
     name: Desktop ${{ matrix.platform }} ${{ matrix.args }}
-    needs: release
     strategy:
       fail-fast: false
       matrix:
@@ -74,6 +44,8 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
       - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}

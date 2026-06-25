@@ -41,30 +41,8 @@ packaging:
 make desktop-dev   # native window against a dev server (run `make web` alongside)
 ```
 
-Prefer the command line or a headless server? Skip the app and use the `cairn` binary directly.
-
-## Install the binary
-
-The fastest way to get the `cairn` CLI/server (the web UI is embedded in it) is the install
-script — it downloads the right prebuilt binary for your OS/arch, verifies its checksum, and
-installs it to `/usr/local/bin` (override with `BINDIR=`):
-
-```sh
-curl -fsSL https://github.com/ShahramMebashar/cairn/releases/latest/download/install.sh | sh
-```
-
-Or download an archive from the [Releases page](https://github.com/ShahramMebashar/cairn/releases)
-— `cairn_<os>_<arch>.tar.gz` (`.zip` on Windows) — verify it against `checksums.txt`, and put
-`cairn` on your `PATH`. Then:
-
-```sh
-cairn version
-cairn web --repo .
-```
-
-::: warning Prebuilt downloads — placeholder
-Released binaries appear once the first version is tagged. Until then, build from source below.
-:::
+Prefer the command line or a headless server? Build the `cairn` binary from source and run it
+directly (the desktop app bundles this same binary as a sidecar).
 
 ## Build the binary
 
