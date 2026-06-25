@@ -1,0 +1,20 @@
+id: ses_d33d96940de92297fe9cb0f4
+task: PROJ-2ap21ckzvv
+attempt: att_d33d96940de92297fe9cb0f4
+actor: agent:claude
+client: claude
+status: finished
+idempotency_key: connect-promote-agents-2026-06-25
+started_at: 2026-06-25T11:47:10.540129Z
+branch: main
+ended_at: 2026-06-25T11:48:39Z
+summary: |-
+  Follow-up: verified the three manual-only agents against their docs and promoted those that checked out.
+
+  Kilo Code → auto: project `.kilocode/mcp.json`, standard mcpServers/command+args (Kilo creates it if missing; project takes precedence over global) per kilo.ai docs.
+  Pi → auto: project `.mcp.json`, mcpServers shape (Pi's preferred project config — same file as Claude Code, so the cairn entry is shared/idempotent) per pi.dev/pi-mcp-adapter.
+  Antigravity → stays manual: mcpServers shape confirmed, but exact path (`~/.gemini/config/mcp_config.json`, single source) and the local/stdio command+args schema are NOT doc-confirmed. Left as guide-only with an accurate path hint; Connect refuses with a clear message.
+
+  Added detection probes for all three and TestConnectAutoAgentsWriteExpectedPaths. make check + pnpm web build pass. Live `cairn web` run confirmed: kilo/pi write valid configs (abs bin path + --repo) and report connected:true; antigravity refuses auto-connect and returns a correct mcpServers JSON guide. No frontend change needed — the page derives the Connect button vs Manual badge from each agent's mode.
+
+  Net auto agents now: Claude, Cursor, Codex, Windsurf, OpenCode, Kilo, Pi (7). Manual: Antigravity (1). Remaining review caveats from the prior session still stand: Codex TOML emits a cosmetic empty [mcp_servers] header; desktop sidecar-path embedding verified by os.Executable() logic + dev binary, not yet inside the packaged Tauri app.

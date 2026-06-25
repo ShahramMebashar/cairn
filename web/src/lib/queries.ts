@@ -14,6 +14,7 @@ import * as api from "./api";
 import type { CreateInput } from "./api";
 
 const tasksKey = (path: string) => ["tasks", path] as const;
+const integrationsKey = (path: string) => ["integrations", path] as const;
 const taskKey = (path: string, id: string) => ["task", path, id] as const;
 const runsKey = (path: string, id: string) => ["runs", path, id] as const;
 const sessionsKey = (path: string, id?: string) => ["sessions", path, ...(id ? [id] : [])] as const;
@@ -265,6 +266,47 @@ export function useEditNote(path: string) {
       toast.success("Note updated");
     },
     onError: fail,
+  });
+}
+
+// --- Integrations ---
+
+export function useIntegrations(path: string) {
+  return useQuery({ queryKey: integrationsKey(path), queryFn: () => api.listIntegrations(path) });
+}
+
+export function useConnectAgent(path: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ agent, actor }: { agent: string; actor?: string }) =>
+      api.connectAgent(path, agent, actor),
+    // Re-detect so the just-connected agent flips to "Connected" without a manual refresh.
+    onSuccess: (_r, vars) => {
+      qc.invalidateQueries({ queryKey: integrationsKey(path) });
+      toast.success(`Connected ${vars.agent}`);
+    },
+    onError: fail,
+  });
+}
+
+export function useDisconnectAgent(path: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (agent: string) => api.disconnectAgent(path, agent),
+    onSuccess: (_r, agent) => {
+      qc.invalidateQueries({ queryKey: integrationsKey(path) });
+      toast.success(`Disconnected ${agent}`);
+    },
+    onError: fail,
+  });
+}
+
+// useAgentManual fetches a manual-setup snippet on demand (enabled when the guide is open).
+export function useAgentManual(path: string, agent: string, actor: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["agent-manual", path, agent, actor],
+    queryFn: () => api.agentManual(path, agent, actor),
+    enabled,
   });
 }
 

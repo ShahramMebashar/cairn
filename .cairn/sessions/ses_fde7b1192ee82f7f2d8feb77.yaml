@@ -1,0 +1,20 @@
+id: ses_fde7b1192ee82f7f2d8feb77
+task: PROJ-2ap21ckzvv
+attempt: att_fde7b1192ee82f7f2d8feb77
+actor: agent:claude
+client: claude
+status: finished
+idempotency_key: connect-page-impl-2026-06-25
+started_at: 2026-06-25T10:53:37.455109Z
+branch: main
+ended_at: 2026-06-25T11:04:29Z
+summary: |-
+  Adds frictionless agent integrations: a new Connect page + one-click MCP auto-config written by the cairn process itself.
+
+  Backend: new `internal/connect` package — agent registry + per-format adapters (mcpServersJSON: Claude/Cursor/Windsurf; codexTOML: Codex; openCodeJSON: OpenCode). Writes are safe-merge (preserve siblings), atomic (temp+rename), back up to `.bak`, and write-and-verify. Binary path resolved via os.Executable()+EvalSymlinks so the desktop sidecar abs path is embedded (never bare `cairn`). v1 auto: Claude, Cursor, Codex, Windsurf, OpenCode (project-local paths; Windsurf global). Manual-only catalog: Kilo, Antigravity, Pi. HTTP in internal/server/connect.go: GET /api/connect, POST /api/connect/{agent}, GET /api/connect/{agent}/manual. Added go-toml/v2.
+
+  Frontend: web/src/pages/Connect.tsx (installed-first sections + catalog, one-click Connect, expandable manual guide, agent-identity field). Routing in App.tsx, sidebar Connect entry, dropdown repointed to the page. Shared CodeBlock extracted; ConnectAgentDialog removed. api/queries hooks added; connect invalidates detection so cards flip to Connected live.
+
+  Verification: make check (vet+tests, incl. new connect tests for merge idempotency/.bak/detection) green; pnpm web build green. Live `cairn web` run: detection found all installed agents with correct scoped paths; POST cursor wrote a valid .cursor/mcp.json (abs bin path + --repo, verified); codex manual returned valid TOML.
+
+  Review notes: (1) manual-only agent config paths (Kilo/Antigravity/Pi) not yet verified against their docs — intentionally degraded to guide-only. (2) Codex TOML emits an empty `[mcp_servers]` parent header before `[mcp_servers.cairn]` — valid and parses, minor cosmetic. (3) Desktop sidecar path embedding is verified only via os.Executable() logic + dev-binary run, not yet exercised inside the packaged Tauri app.

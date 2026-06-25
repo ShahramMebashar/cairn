@@ -1,0 +1,9 @@
+id: ses_ba386bc76686674c3b2b6bc0
+task: PROJ-2ap21ckzvv
+attempt: att_ba386bc76686674c3b2b6bc0
+actor: agent:claude
+client: claude
+status: active
+idempotency_key: connect-disconnect-2026-06-25
+started_at: 2026-06-25T12:06:05.35506Z
+branch: main

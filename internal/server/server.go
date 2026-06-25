@@ -93,6 +93,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/tasks/{id}/notes/{note}", s.handleEditNote)
 	mux.HandleFunc("DELETE /api/tasks/{id}/notes/{note}", s.handleDeleteNote)
 
+	// Integrations: detect agents and write their MCP config (one-click connect).
+	mux.HandleFunc("GET /api/connect", s.handleListIntegrations)
+	mux.HandleFunc("POST /api/connect/{agent}", s.handleConnectAgent)
+	mux.HandleFunc("DELETE /api/connect/{agent}", s.handleDisconnectAgent)
+	mux.HandleFunc("GET /api/connect/{agent}/manual", s.handleAgentManual)
+
 	// Readiness probe for the Tauri shell: no ?path needed, returns once the
 	// server is accepting requests.
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {

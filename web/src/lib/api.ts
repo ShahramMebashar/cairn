@@ -197,3 +197,41 @@ export const editNote = (path: string, id: string, text: string, note?: string, 
 
 export const deleteNote = (path: string, id: string, note?: string, index?: number) =>
   req<Task>("DELETE", noteURL(path, id, note, index));
+
+// --- Integrations: connect AI agents to this project over MCP ---
+
+export type AgentMode = "auto" | "manual";
+
+// AgentStatus mirrors connect.AgentStatus: an agent in the catalog, whether it looks
+// installed on this machine, and whether its config already points at cairn.
+export type AgentStatus = {
+  id: string;
+  name: string;
+  mode: AgentMode;
+  installed: boolean;
+  connected: boolean;
+  targetPath?: string;
+  docsURL?: string;
+};
+
+// AgentGuide is the manual-setup snippet for one agent: the file content and where it goes.
+export type AgentGuide = {
+  path?: string;
+  lang: string; // "json" | "toml"
+  config: string;
+};
+
+export const listIntegrations = (path: string) =>
+  req<{ agents: AgentStatus[] }>("GET", `/api/connect?path=${enc(path)}`).then((r) => r.agents ?? []);
+
+export const connectAgent = (path: string, agent: string, actor?: string) =>
+  req<{ connected: boolean; path: string }>("POST", `/api/connect/${enc(agent)}`, { path, actor });
+
+export const disconnectAgent = (path: string, agent: string) =>
+  req<{ connected: boolean; path: string }>("DELETE", `/api/connect/${enc(agent)}?path=${enc(path)}`);
+
+export const agentManual = (path: string, agent: string, actor?: string) =>
+  req<AgentGuide>(
+    "GET",
+    `/api/connect/${enc(agent)}/manual?path=${enc(path)}${actor ? `&actor=${enc(actor)}` : ""}`,
+  );

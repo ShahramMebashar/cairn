@@ -12,6 +12,7 @@ import { Board } from "@/pages/Board";
 import { BoardView } from "@/pages/BoardView";
 import { TaskDetail } from "@/pages/TaskDetail";
 import { Graph } from "@/pages/Graph";
+import { Connect } from "@/pages/Connect";
 import { CommandPalette } from "@/components/CommandPalette";
 import { CaptureView } from "@/components/CaptureView";
 import { SettingsDialog } from "@/components/SettingsDialog";
@@ -75,7 +76,8 @@ type View =
   | { kind: "list"; filter: Filter }
   | { kind: "task"; id: string }
   | { kind: "graph" }
-  | { kind: "board" };
+  | { kind: "board" }
+  | { kind: "connect" };
 type Route = { slug: string | null; view: View };
 
 const FILTERS: Filter[] = ["all", "active", "stalled", "review", "backlog", "ready"];
@@ -92,6 +94,7 @@ function parseHash(): Route {
   if (rest[0] === "task" && rest[1]) view = { kind: "task", id: rest[1] };
   else if (rest[0] === "graph") view = { kind: "graph" };
   else if (rest[0] === "board") view = { kind: "board" };
+  else if (rest[0] === "connect") view = { kind: "connect" };
   else if (FILTERS.includes(rest[0] as Filter)) view = { kind: "list", filter: rest[0] as Filter };
   return { slug, view };
 }
@@ -100,6 +103,7 @@ function hashFor(slug: string, view: View): string {
   if (view.kind === "task") return `#/${slug}/task/${encodeURIComponent(view.id)}`;
   if (view.kind === "graph") return `#/${slug}/graph`;
   if (view.kind === "board") return `#/${slug}/board`;
+  if (view.kind === "connect") return `#/${slug}/connect`;
   return `#/${slug}/${view.filter}`;
 }
 
@@ -254,9 +258,11 @@ function Workspace({
         active={view.kind === "list" ? view.filter : null}
         graphActive={view.kind === "graph"}
         boardActive={view.kind === "board"}
+        connectActive={view.kind === "connect"}
         onFilter={(f) => navigate({ kind: "list", filter: f })}
         onGraph={() => navigate({ kind: "graph" })}
         onBoard={() => navigate({ kind: "board" })}
+        onConnect={() => navigate({ kind: "connect" })}
         onChangeFolder={onChangeFolder}
         onNewTask={newTask}
         onOpenTask={(id) => navigate({ kind: "task", id })}
@@ -287,6 +293,8 @@ function Workspace({
               onOpenTask={(id) => navigate({ kind: "task", id })}
               onNewTask={newTask}
             />
+          ) : view.kind === "connect" ? (
+            <Connect path={path} status={status} />
           ) : (
             <TaskDetail
               path={path}

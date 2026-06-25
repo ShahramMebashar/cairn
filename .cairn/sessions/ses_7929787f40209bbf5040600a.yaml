@@ -1,0 +1,22 @@
+id: ses_7929787f40209bbf5040600a
+task: PROJ-2ap21ckzvv
+attempt: att_7929787f40209bbf5040600a
+actor: agent:claude
+client: claude
+status: finished
+idempotency_key: connect-agent-identity-2026-06-25
+started_at: 2026-06-25T11:55:07.372731Z
+branch: main
+ended_at: 2026-06-25T11:57:51Z
+summary: |-
+  Fix: agents now connect under their own identity, not the human operator's.
+
+  Problem: the Connect page seeded a single "Agent identity" field from the human actor (human:<you>), and the server fell back to the human X-Cairn-Actor header when no actor was supplied — so every connected agent's config (and thus its provenance) would be stamped as the human, collapsing cairn's agent:/human: distinction.
+
+  Backend: added resolveActor(agentID, actor) — empty actor → `agent:<id>` (agent:cursor, agent:codex, …); a supplied actor still overrides (e.g. agent:cursor-2 for a second instance). Removed the human fallbacks in handleConnectAgent/handleAgentManual so the human header can never leak into an agent config.
+
+  Frontend: removed the shared human-seeded field; each AgentCard owns an editable identity defaulting to agent:<id>, shown as a subtle inline monospace input (transparent + overridable, zero friction for the common case). Page copy updated to explain it.
+
+  Tests: TestConnectDefaultsToPerAgentIdentity. make check + pnpm web build green. Live-verified: POST connect with no actor + an X-Cairn-Actor: human:shahram header writes agent:cursor (no leak); override writes agent:codex-2; manual guide defaults to agent:windsurf.
+
+  Caveats unchanged from prior sessions: Codex TOML cosmetic empty [mcp_servers] header; desktop sidecar-path embedding verified by os.Executable() logic + dev binary, not yet inside the packaged Tauri app.

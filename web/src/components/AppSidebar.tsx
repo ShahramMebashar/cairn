@@ -9,6 +9,7 @@ import {
   Network,
   Pencil,
   PenSquare,
+  Plug,
   ScanEye,
   Sparkles,
   SquareKanban,
@@ -28,7 +29,6 @@ import { cn } from "@/lib/utils";
 import { getTheme, toggleTheme, type Theme } from "@/lib/theme";
 import { NotificationBell } from "@/components/NotificationBell";
 import { HelpDialog } from "@/components/HelpDialog";
-import { ConnectAgentDialog } from "@/components/ConnectAgentDialog";
 import { Assignee } from "@/components/Assignee";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -56,9 +56,11 @@ export function AppSidebar({
   active,
   graphActive,
   boardActive,
+  connectActive,
   onFilter,
   onGraph,
   onBoard,
+  onConnect,
   onChangeFolder,
   onNewTask,
   onOpenTask,
@@ -69,9 +71,11 @@ export function AppSidebar({
   active: Filter | null;
   graphActive: boolean;
   boardActive: boolean;
+  connectActive: boolean;
   onFilter: (f: Filter) => void;
   onGraph: () => void;
   onBoard: () => void;
+  onConnect: () => void;
   onChangeFolder: () => void;
   onNewTask: () => void;
   onOpenTask: (id: string) => void;
@@ -79,7 +83,6 @@ export function AppSidebar({
 }) {
   const [theme, setTheme] = useState<Theme>(getTheme());
   const [helpOpen, setHelpOpen] = useState(false);
-  const [connectOpen, setConnectOpen] = useState(false);
   const { actor, setName } = useIdentity(status.suggestedActor);
   const { data: tasks } = useTasks(path);
   const folderName = status.root.split("/").filter(Boolean).pop() ?? status.root;
@@ -108,7 +111,7 @@ export function AppSidebar({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onChangeFolder}>Switch folder…</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setConnectOpen(true)}>Connect an agent…</DropdownMenuItem>
+            <DropdownMenuItem onClick={onConnect}>Connect an agent…</DropdownMenuItem>
             <DropdownMenuItem onClick={onOpenSettings}>Settings…</DropdownMenuItem>
             <DropdownMenuItem onClick={() => setTheme(toggleTheme())}>
               {theme === "dark" ? "Light theme" : "Dark theme"}
@@ -193,6 +196,19 @@ export function AppSidebar({
           <Network className="size-4 shrink-0" />
           Graph
         </button>
+        <button
+          onClick={onConnect}
+          aria-current={connectActive ? "page" : undefined}
+          className={cn(
+            "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] transition-colors",
+            connectActive
+              ? "bg-foreground/[0.07] font-medium text-foreground"
+              : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
+          )}
+        >
+          <Plug className="size-4 shrink-0" />
+          Connect
+        </button>
       </nav>
 
       <div className="flex flex-col gap-1 px-3 py-2">
@@ -218,7 +234,6 @@ export function AppSidebar({
         </div>
       </div>
       <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
-      <ConnectAgentDialog open={connectOpen} onOpenChange={setConnectOpen} path={path} actor={actor} />
     </aside>
   );
 }
