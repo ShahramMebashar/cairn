@@ -16,7 +16,7 @@ title: Task files & config
 
 ## Task file format
 
-A task is Markdown: **YAML frontmatter** (machine fields) + **Markdown body** (human
+A task is Markdown: **YAML frontmatter** (machine fields) plus a **Markdown body** (human
 intent). The engine never edits the body after creation.
 
 ### Minimal valid task
@@ -70,10 +70,10 @@ Prose intent and constraints go here.
 | `context` | caller | opaque map; engine never interprets it |
 | `checks` | caller | see [gates](#gates) |
 | `provenance` | engine | append-only; one entry per write |
-| **any other key** | — | preserved verbatim, ignored by the engine |
+| **any other key** | (none) | preserved verbatim, ignored by the engine |
 
-**Unknown-key preservation is guaranteed.** Add `priority: high` and it survives — with
-ordering and comments intact — across engine writes. (Writes edit the YAML node surgically,
+**Unknown-key preservation is guaranteed.** Add `priority: high` and it survives, with
+ordering and comments intact, across engine writes. (Writes edit the YAML node surgically,
 never a struct round-trip.)
 
 ## config.yaml
@@ -87,10 +87,10 @@ initial: backlog             # state new tasks start in
 check_timeout_default: 120   # seconds, when a check omits timeout
 ```
 
-- `states` are free strings you define — there is no hardcoded status enum.
+- `states` are free strings you define; there is no hardcoded status enum.
 - `closed` drives deps-readiness and the checks gate.
-- Ids are minted at create as `prefix` + a time-ordered, collision-resistant base32 token, so
-  concurrent creators in separate clones never collide — no shared counter, no merge conflict.
+- Ids are minted at create as `prefix` plus a time-ordered, collision-resistant base32 token, so
+  concurrent creators in separate clones never collide: no shared counter, no merge conflict.
   `counter` is retained only for backward-compatible parsing and is no longer incremented.
 
 ## Dependencies
@@ -99,34 +99,34 @@ check_timeout_default: 120   # seconds, when a check omits timeout
   read, never stored.
 - **Gate point is START:** a task can't leave `initial` until its deps are closed. Deps do
   not gate closing.
-- A dep id not present in `tasks/` (**dangling**) or a **cycle** is a hard error on load —
-  loud failure beats a silently-stuck task.
+- A dep id not present in `tasks/` (**dangling**) or a **cycle** is a hard error on load.
+  Loud failure beats a silently-stuck task.
 
 ## Gates
 
-Transitions are free — any state to any state — except two gates:
+Transitions are free (any state to any state) except two gates:
 
-1. **Deps gate** — can't leave `initial` unless all deps are closed.
-2. **Checks gate** — can't enter a `closed` state unless all `checks` pass.
+1. **Deps gate**: can't leave `initial` unless all deps are closed.
+2. **Checks gate**: can't enter a `closed` state unless all `checks` pass.
    - Zero checks ⇒ passes vacuously.
    - On closing, if checks aren't already all `pass`, the engine **auto-runs** the `cmd`
      checks, then closes on all-pass or **refuses** on any fail.
 
-Reopening a closed task is allowed; check results are **not** reset on reopen — they keep
+Reopening a closed task is allowed. Check results are **not** reset on reopen; they keep
 their last value, so a re-close reuses them.
 
 ::: tip
-For the full gates + checks model — including manual checks, exit codes, and run logs — see
+For the gates and checks model (manual checks, exit codes, and run logs) see
 [Checks & gates](/guides/checks-and-gates).
 :::
 
 ## Checks
 
-- A check **with** a `cmd` is executed via `sh -c "<cmd>"` — any shell line works
+- A check **with** a `cmd` is executed via `sh -c "<cmd>"`; any shell line works
   (`go test ./...`, `pytest -q && ruff check .`, `./scripts/verify.sh`).
-- A check **without** a `cmd` is **manual** — its `result` is set by attestation, not
+- A check **without** a `cmd` is **manual**: its `result` is set by attestation, not
   execution. A pending manual check blocks closing until resolved.
-- Exit code `0` = `pass`, non-zero = `fail`. Timeout ⇒ the process (and its group) is
+- Exit code `0` = `pass`, non-zero = `fail`. On timeout the process (and its group) is
   killed, `result: fail`.
 - Output (stdout+stderr, ~8KB tail) goes to `.cairn/runs/<id>-<timestamp>.log`; the task
   file stores only `result:` for clean diffs.

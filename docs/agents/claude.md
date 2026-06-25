@@ -4,7 +4,7 @@ title: Claude Code
 
 # Claude Code
 
-[Claude Code](https://claude.com/claude-code) is Anthropic's official CLI. Its project MCP config lives in `./.mcp.json` at the repo root — project-scoped and shareable.
+[Claude Code](https://claude.com/claude-code) is Anthropic's official CLI. Its project MCP config lives in `./.mcp.json` at the repo root, project-scoped and shareable.
 
 ## Connect (one-click)
 
@@ -47,8 +47,8 @@ Claude Code connects as `agent:claude` by default. Edit the identity on the card
 - `.mcp.json` is project-scoped and Claude Code resolves it relative to the repo, so it's safe to commit and share.
 - Per-user setups still prefer absolute paths.
 - Remove the entry with `claude mcp remove cairn`.
-- Pi reads the SAME `./.mcp.json` file (see [/agents/pi](/agents/pi)), so connecting both writes one shared `cairn` entry.
+- Pi reads the same `./.mcp.json` file (see [/agents/pi](/agents/pi)), so connecting both writes one shared `cairn` entry.
 
 ## Alternative: HTTP transport
 
-While the cairn app is running it also exposes an MCP endpoint at `http://127.0.0.1:7777/mcp?repo=<project>&actor=agent:claude` (the port may differ — cairn prints `CAIRN_WEB_URL=` on startup). URL-based MCP clients can point at that instead of the stdio binary. The tradeoff: the app must be running for the endpoint to respond.
+While the cairn app is running it also exposes an MCP endpoint at `http://127.0.0.1:7777/mcp?repo=<project>&actor=agent:claude` (the port may differ; cairn prints `CAIRN_WEB_URL=` on startup). URL-based MCP clients can point at that instead of the stdio binary. The tradeoff: the app must be running for the endpoint to respond.

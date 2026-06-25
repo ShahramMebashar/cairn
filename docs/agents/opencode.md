@@ -35,10 +35,10 @@ OpenCode connects as `agent:opencode` by default. Edit the identity on the card 
 
 ## Gotchas
 
-- OpenCode uses a different shape from the others — a top-level `mcp` object, `type: "local"`, and `command` is a single array (binary + args), not separate command/args.
+- OpenCode uses a different shape from the others: a top-level `mcp` object, `type: "local"`, and `command` is a single array (binary + args), not separate command/args.
 - cairn seeds `$schema` for fresh files.
 - OpenCode also reads a global `~/.config/opencode/opencode.json`.
 
 ## Alternative: HTTP transport
 
-While the cairn app is running it also exposes an MCP endpoint at `http://127.0.0.1:7777/mcp?repo=<project>&actor=agent:opencode` (the port may differ — cairn prints `CAIRN_WEB_URL=` on startup). URL-based MCP clients can point at that instead of the stdio binary. The tradeoff: the app must be running for the endpoint to respond.
+While the cairn app is running it also exposes an MCP endpoint at `http://127.0.0.1:7777/mcp?repo=<project>&actor=agent:opencode` (the port may differ; cairn prints `CAIRN_WEB_URL=` on startup). URL-based MCP clients can point at that instead of the stdio binary. The tradeoff: the app must be running for the endpoint to respond.

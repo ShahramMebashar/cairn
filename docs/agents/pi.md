@@ -33,9 +33,9 @@ Pi connects as `agent:pi` by default. Edit the identity on the card to run multi
 
 ## Gotchas
 
-- Pi's preferred project config is `./.mcp.json` — the SAME file Claude Code uses (see [/agents/claude](/agents/claude)), so connecting both Pi and Claude writes one shared `cairn` entry, and whichever you connect last sets the `--actor`.
+- Pi's preferred project config is `./.mcp.json`, the same file Claude Code uses (see [/agents/claude](/agents/claude)), so connecting both Pi and Claude writes one shared `cairn` entry, and whichever you connect last sets the `--actor`.
 - Pi also reads `~/.pi/agent/mcp.json` and `~/.config/mcp/mcp.json`.
 
 ## Alternative: HTTP transport
 
-While the cairn app is running it also exposes an MCP endpoint at `http://127.0.0.1:7777/mcp?repo=<project>&actor=agent:pi` (the port may differ — cairn prints `CAIRN_WEB_URL=` on startup). URL-based MCP clients can point at that instead of the stdio binary. The tradeoff: the app must be running for the endpoint to respond.
+While the cairn app is running it also exposes an MCP endpoint at `http://127.0.0.1:7777/mcp?repo=<project>&actor=agent:pi` (the port may differ; cairn prints `CAIRN_WEB_URL=` on startup). URL-based MCP clients can point at that instead of the stdio binary. The tradeoff: the app must be running for the endpoint to respond.

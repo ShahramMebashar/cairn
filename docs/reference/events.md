@@ -6,7 +6,7 @@ title: Events (SSE)
 
 `GET /api/events?path=<repo>` is a [Server-Sent Events](https://developer.mozilla.org/docs/Web/API/Server-sent_events)
 stream of change signals. The server watches the file-based store, so changes made by
-**any** actor — including MCP agents in a separate process — push to connected clients in
+**any** actor (including MCP agents in a separate process) push to connected clients in
 real time. See the [HTTP API](/reference/http-api) for the surrounding endpoints.
 
 The stream carries **no task data**: each message is a signal telling the client *what to
@@ -38,9 +38,9 @@ refetch* via the REST endpoints. This keeps the stream from drifting from the DT
 
 | `type` | Emitted when | Client should refetch |
 |---|---|---|
-| `task-changed` | exactly one task file changed in the window | that task (detail, runs, and its sessions) — `GET /api/tasks/{id}` |
-| `tasks-changed` | board config changed, or more than one task changed | the whole list — `GET /api/tasks` |
-| `session-changed` | only session/live writes (no task file touched) | sessions for the path — `GET /api/sessions` (the `session` id is advisory; refresh all) |
+| `task-changed` | exactly one task file changed in the window | that task (detail, runs, and its sessions) via `GET /api/tasks/{id}` |
+| `tasks-changed` | board config changed, or more than one task changed | the whole list via `GET /api/tasks` |
+| `session-changed` | only session/live writes (no task file touched) | sessions for the path via `GET /api/sessions` (the `session` id is advisory; refresh all) |
 
 A `task-changed` already implies the task's session queries are stale, so a coincident
 session write in the same window is covered by refetching that task.

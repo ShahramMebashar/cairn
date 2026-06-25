@@ -16,7 +16,7 @@ subcommands.
 
 ## cairn init
 
-Scaffolds the `.cairn/` workspace in a project. Idempotent — running it on an
+Scaffolds the `.cairn/` workspace in a project. Idempotent: running it on an
 already-initialized repo is a no-op. When `--prefix` is omitted it is derived from the
 project folder name.
 
@@ -32,9 +32,9 @@ cairn init --prefix PROJ --repo .
 ## cairn serve
 
 Runs the MCP server over stdio, the way an agent connects. `--actor` is **required** and
-fixes the write identity for the whole process — every write is stamped with it as
+fixes the write identity for the whole process: every write is stamped with it as
 provenance (it is never a per-call argument). The workspace is auto-initialized on start,
-so a freshly opened project just works.
+so a freshly opened project works immediately.
 
 | Flag | Default | Meaning |
 |---|---|---|
@@ -52,8 +52,8 @@ A client closing the pipe (EOF) or `Ctrl-C` is a normal shutdown, not a failure.
 
 ## cairn web
 
-Runs the HTTP server for the web UI. It prints one machine-parseable line on stdout —
-`CAIRN_WEB_URL=<url>` — for a desktop shell to read; the human-readable line goes to
+Runs the HTTP server for the web UI. It prints one machine-parseable line on stdout
+(`CAIRN_WEB_URL=<url>`) for a desktop shell to read; the human-readable line goes to
 stderr. It prefers `127.0.0.1:7777` (via the default `--addr`); if that port is busy it
 scans the next 20 ports and finally falls back to an OS-assigned free port, so the URL it
 prints may differ from the requested address.

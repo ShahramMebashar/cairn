@@ -33,10 +33,10 @@ Windsurf connects as `agent:windsurf` by default. Edit the identity on the card 
 
 ## Gotchas
 
-- Windsurf has NO project-level config — this file is global, shared across all your projects, so the `--repo` arg pins this entry to one project.
+- Windsurf has NO project-level config. This file is global, shared across all your projects, so the `--repo` arg pins this entry to one project.
 - Re-Connect from another project to repoint it, or add a second entry by hand.
 - After writing, refresh MCP servers in Windsurf (Cascade → MCP) or restart.
 
 ## Alternative: HTTP transport
 
-While the cairn app is running it also exposes an MCP endpoint at `http://127.0.0.1:7777/mcp?repo=<project>&actor=agent:windsurf` (the port may differ — cairn prints `CAIRN_WEB_URL=` on startup). URL-based MCP clients can point at that instead of the stdio binary. The tradeoff: the app must be running for the endpoint to respond.
+While the cairn app is running it also exposes an MCP endpoint at `http://127.0.0.1:7777/mcp?repo=<project>&actor=agent:windsurf` (the port may differ; cairn prints `CAIRN_WEB_URL=` on startup). URL-based MCP clients can point at that instead of the stdio binary. The tradeoff: the app must be running for the endpoint to respond.

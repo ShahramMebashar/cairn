@@ -8,11 +8,11 @@ Every verb is a thin adapter over the same rule-set in `internal/task`. Identity
 at server startup via `--actor`; it is **not** a tool argument. Every **write** appends one
 `provenance` entry; reads never mutate.
 
-All write verbs return the full task (the same shape as `get`).
+All write verbs return the full task, the shape that `get` returns.
 
 | Verb | R/W | Arguments | Returns |
 |---|---|---|---|
-| [`identity`](#agent-sessions) | R | — | bound actor/client/version |
+| [`identity`](#agent-sessions) | R | (none) | bound actor/client/version |
 | [`list`](#list) | R | `status?`, `assignee?`, `ready?`, `execution?` | `{ tasks: [...] }` |
 | [`get`](#get) | R | `id` | task |
 | [`create`](#create) | W | `title`, `body?`, `deps?`, `checks?` | task |
@@ -47,7 +47,7 @@ All write verbs return the full task (the same shape as `get`).
 }
 ```
 
-`ready` is **derived** (deps-satisfied), computed on read, never stored.
+`ready` is **derived** (deps-satisfied), computed on read and never stored.
 
 ---
 
@@ -62,7 +62,7 @@ Filter the task graph. Omit a filter to ignore it.
 | `ready` | bool | only tasks whose deps are all closed (`true`) / not (`false`) |
 | `execution` | string | `active`, `stalled`, or `awaiting_review` |
 
-`list(ready=true, status=<initial>)` is the agent's **"what can I start now"** query.
+`list(ready=true, status=<initial>)` is the agent's "what can I start now" query.
 
 ```json
 { "ready": true, "status": "backlog" }
@@ -94,7 +94,7 @@ A check object:
 | Field | Meaning |
 |---|---|
 | `desc` | what it verifies (required) |
-| `cmd` | shell command line; **omit for a manual check** |
+| `cmd` | shell command line; omit for a manual check |
 | `type` | `manual` for an attested check |
 | `cwd` | working dir relative to repo root |
 | `timeout` | seconds (falls back to `check_timeout_default`) |
@@ -124,9 +124,9 @@ task already held by someone else fails.
 
 Move a task to state `to`, applying the two gates:
 
-1. **Deps gate** — cannot leave the `initial` state until all `deps` are closed.
-2. **Checks gate** — cannot enter a closed state unless all checks pass. If they haven't,
-   `transition` **auto-runs** the `cmd` checks, then closes on all-pass or **refuses** on
+1. **Deps gate**: cannot leave the `initial` state until all `deps` are closed.
+2. **Checks gate**: cannot enter a closed state unless all checks pass. If they haven't,
+   `transition` auto-runs the `cmd` checks, then closes on all-pass or refuses on
    any fail. (Manual checks can't be auto-run; a pending one blocks the close.)
 
 All other transitions are free (any state → any state, including reopening a closed task).
@@ -135,7 +135,7 @@ All other transitions are free (any state → any state, including reopening a c
 { "id": "PROJ-002", "to": "done" }
 ```
 
-> Closing can block up to the checks' timeout — that latency is intentional; closing is
+> Closing can block up to the checks' timeout. That latency is intentional; closing is
 > exactly when verification belongs.
 
 See [Checks and gates](/guides/checks-and-gates) for the full gate model.
@@ -159,7 +159,7 @@ file stores only `result: pass | fail`.
 
 ## note
 
-Append a free-text `provenance` entry — an audit breadcrumb, no state change.
+Append a free-text `provenance` entry: an audit breadcrumb, no state change.
 
 ```json
 { "id": "PROJ-002", "text": "blocked on upstream API change" }

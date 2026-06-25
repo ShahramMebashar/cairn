@@ -77,8 +77,8 @@ func (r Runner) resolveShell() (string, error) {
 		shell = "sh"
 	}
 	if _, err := exec.LookPath(shell); err != nil {
-		return "", fmt.Errorf("check: shell %q not found on PATH — install a POSIX shell "+
-			"(Git Bash or WSL on Windows) or set CAIRN_SHELL to one: %w", shell, err)
+		return "", fmt.Errorf("check: shell %q not found on PATH. Install a POSIX shell "+
+			"(Git Bash or WSL on Windows), or set CAIRN_SHELL to one: %w", shell, err)
 	}
 	return shell, nil
 }

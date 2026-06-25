@@ -1,0 +1,23 @@
+id: ses_b8c98419824a8ff456fc8838
+task: PROJ-2aph9hgz8b
+attempt: att_b8c98419824a8ff456fc8838
+actor: agent:claude
+client: claude
+status: finished
+idempotency_key: humanize-docs-2026-06-25
+started_at: 2026-06-25T15:14:00.826121Z
+branch: main
+ended_at: 2026-06-25T15:25:06Z
+summary: |-
+  Humanized the docs: concise, plain voice, no em-dashes, no AI filler. Saved the preference as a memory so it sticks.
+
+  - Rewrote the visitor funnel by hand in the new voice: index, introduction, installation, quickstart.
+  - Three parallel subagents swept the rest (4 guides, 9 agent pages, 4 reference pages): removed every em-dash, cut hype words, kept all frontmatter, code, tables, links, and facts intact.
+  - Removed the em-dash from cairn's own shell-not-found error string (internal/check/check.go) and matched the quote in checks-and-gates.md, so even the product output is clean.
+  - Cleaned em-dashes in README, CHANGELOG, SECURITY. Left AGENTS.md (internal contributor guide) as-is.
+
+  Verified: zero em-dashes across docs + README/CHANGELOG/SECURITY; go test ./internal/check green; docs build clean.
+
+  Side fix: the acceptance check originally scanned docs/node_modules (33 dependency READMEs contain em-dashes), so it false-failed. Added --exclude-dir=node_modules. Worth knowing: cairn's checks run real sh `grep -r`, which recurses node_modules, whereas an interactive shell's ripgrep alias skips gitignored dirs. Same lesson applies to any future grep-based check.
+
+  Going forward I'll keep prose plain and avoid em-dashes in chat and commits too, per the saved feedback.

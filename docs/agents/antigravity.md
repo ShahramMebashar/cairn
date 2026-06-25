@@ -33,5 +33,5 @@ Antigravity connects as `agent:antigravity` by default. Edit the `--actor` value
 
 ## Gotchas
 
-- Antigravity shares config with the Gemini CLI; the `mcpServers` shape is confirmed, but the exact file path (`~/.gemini/config/mcp_config.json`) comes from a single source — verify against your install.
+- Antigravity shares config with the Gemini CLI. The `mcpServers` shape is confirmed, but the exact file path (`~/.gemini/config/mcp_config.json`) comes from a single source, so verify against your install.
 - Antigravity uses `serverUrl` for REMOTE servers, but cairn is a LOCAL stdio server, so it uses `command`/`args` as shown.

@@ -19,7 +19,7 @@ defined in `internal/mcp/sessions.go` (`ServiceVersion`) and `desktop/src-tauri/
     and `GET /api/connect/{agent}/manual`, backed by `internal/connect`.
   - Config writes are safe-merge: only the `cairn` entry is added/removed, the file is written
     atomically with a `<file>.bak` backup, and the result is verified.
-- **Documentation site** — a VitePress site under `docs/` (guides, per-agent pages, and an
+- **Documentation site**: a VitePress site under `docs/` (guides, per-agent pages, and an
   HTTP/MCP/CLI reference), deployed to GitHub Pages.
 - **Cross-platform desktop installers.** The release workflow builds the desktop app for macOS
   (`.dmg`, signed + notarized), Windows (NSIS `.exe`), and Linux (`.deb` + AppImage), and
@@ -34,11 +34,11 @@ Initial release.
 
 ### Added
 
-- **File-based task graph** under `.cairn/` — tasks as Markdown (YAML frontmatter + prose body),
+- **File-based task graph** under `.cairn/`: tasks as Markdown (YAML frontmatter + prose body),
   engine-assigned collision-free ids, dependencies, and a two-gate transition model (deps gate to
   start, checks gate to close).
 - **MCP server** (`cairn serve`) over stdio, plus MCP over Streamable HTTP from `cairn web`.
-- **Web UI** (`cairn web`) — task board, dependency graph, and live updates over SSE.
-- **Observable agent sessions** — `begin`/`heartbeat`/`finish`/`cancel` with stall detection and
+- **Web UI** (`cairn web`): task board, dependency graph, and live updates over SSE.
+- **Observable agent sessions**: `begin`/`heartbeat`/`finish`/`cancel` with stall detection and
   review handoff.
-- **Desktop app** — the same binary embedded in a Tauri shell with a live menu-bar tray.
+- **Desktop app**: the same binary embedded in a Tauri shell with a live menu-bar tray.

@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: cairn
-  text: Task management your agents and you share
-  tagline: A repo-native task graph as plain Markdown files, served to AI agents over MCP and to humans over a clean web UI — one source of truth, one rule-set, no database.
+  text: Shared task tracking for you and your agents
+  tagline: Your tasks are Markdown files in your repo. cairn serves them to AI agents over MCP and to you over a web UI. One source of truth, no database.
   image:
     light: /logo.svg
     dark: /logo-dark.svg
@@ -24,36 +24,35 @@ hero:
       link: https://github.com/ShahramMebashar/cairn
 features:
   - title: Lives in your repo
-    details: Tasks are Markdown files under .cairn/ — YAML frontmatter for the machine, a prose body for humans. Diff them, branch them, review them in a PR. No external service.
-  - title: Built for agents
-    details: A single Go binary serves the graph over MCP (stdio or HTTP). Agents list ready work, claim it, run an observable session with heartbeats, and hand off for review.
-  - title: One rule-set, two front-ends
-    details: The web UI and the MCP server are thin adapters over the same engine in internal/task — the rules can't drift between what an agent sees and what you see.
-  - title: Connect any agent in one click
-    details: The Connect page detects installed agents (Claude, Cursor, Codex, Windsurf, OpenCode, Kilo, Pi…) and writes their MCP config for you — each under its own identity.
-  - title: Run it however you like
-    details: A native desktop app with a live tray, a browser UI, or a headless MCP server — all the same binary. Download the app for macOS, Windows, or Linux, or run cairn web.
+    details: A task is a Markdown file. YAML on top for the machine, prose below for people. Diff it, branch it, review it in a PR. A task's history is its git history.
+  - title: Made for agents
+    details: A single Go binary serves the task graph over MCP. Agents find ready work, claim it, report progress with heartbeats, and hand off for review. Every write is signed with who made it.
+  - title: One rule-set
+    details: The web UI and the agent API are two front-ends over the same engine. You and your agent always see the same state and the same rules.
+  - title: Connect an agent in one click
+    details: cairn finds the agents you have installed (Claude, Cursor, Codex, Windsurf, and more) and writes their config for you. Each connects as itself.
+  - title: Run it your way
+    details: A desktop app with a tray, a browser UI, or a headless server. Download it for macOS, Windows, or Linux, or run cairn web.
 ---
 
-![The cairn task board, graph, and Connect page](/app-screenshot.png)
+![The cairn task board, dependency graph, and Connect page](/app-screenshot.png)
 
-## Supported agents
+## Agents
 
-cairn writes each agent's MCP config for you from the **Connect** page (or you can copy the
-snippet and do it by hand). Every agent connects under its own identity (`agent:<id>`) so its
-work is attributed correctly in provenance.
+cairn writes each agent's config for you from the **Connect** page, or you copy a snippet and
+paste it yourself. Each agent connects under its own name (`agent:cursor`, `agent:codex`, and
+so on), so its work shows up as its own in the task history.
 
-| Agent | One-click | Config it writes | Default identity |
+| Agent | One-click | Config it writes | Connects as |
 | --- | --- | --- | --- |
-| [Claude Code](/agents/claude) | Yes | `./.mcp.json` (project) | `agent:claude` |
-| [Cursor](/agents/cursor) | Yes | `./.cursor/mcp.json` (project) | `agent:cursor` |
-| [Codex](/agents/codex) | Yes | `./.codex/config.toml` (project) | `agent:codex` |
-| [Windsurf](/agents/windsurf) | Yes | `~/.codeium/windsurf/mcp_config.json` (global) | `agent:windsurf` |
-| [OpenCode](/agents/opencode) | Yes | `./opencode.json` (project) | `agent:opencode` |
-| [Kilo Code](/agents/kilo) | Yes | `./.kilocode/mcp.json` (project) | `agent:kilo` |
-| [Pi](/agents/pi) | Yes | `./.mcp.json` (project) | `agent:pi` |
-| [Antigravity](/agents/antigravity) | Manual | `~/.gemini/config/mcp_config.json` (global) | `agent:antigravity` |
+| [Claude Code](/agents/claude) | Yes | `./.mcp.json` | `agent:claude` |
+| [Cursor](/agents/cursor) | Yes | `./.cursor/mcp.json` | `agent:cursor` |
+| [Codex](/agents/codex) | Yes | `./.codex/config.toml` | `agent:codex` |
+| [Windsurf](/agents/windsurf) | Yes | `~/.codeium/windsurf/mcp_config.json` | `agent:windsurf` |
+| [OpenCode](/agents/opencode) | Yes | `./opencode.json` | `agent:opencode` |
+| [Kilo Code](/agents/kilo) | Yes | `./.kilocode/mcp.json` | `agent:kilo` |
+| [Pi](/agents/pi) | Yes | `./.mcp.json` | `agent:pi` |
+| [Antigravity](/agents/antigravity) | Manual | `~/.gemini/config/mcp_config.json` | `agent:antigravity` |
 
-Any MCP client works — these are just the ones cairn can wire up automatically. See the
-[Agents overview](/agents/) for how auto-connect works, or [Connect to Claude](/agents/claude)
-to start.
+Any MCP client works. These are the ones cairn sets up for you. See the
+[agents guide](/agents/) for how that works, or [Claude Code](/agents/claude) to start.

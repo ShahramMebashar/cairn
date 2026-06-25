@@ -4,21 +4,21 @@ title: Checks & gates
 
 # Checks & gates
 
-Transitions in cairn are free — any state to any state — except for two gates. Everything
+Transitions in cairn are free (any state to any state) except for two gates. Everything
 else about moving a task through its states is unconstrained.
 
 ## The two gates
 
-1. **Deps gate** — a task can't leave the `initial` state until every id in its `deps` is in
+1. **Deps gate**: a task can't leave the `initial` state until every id in its `deps` is in
    a `closed` state. Deps do not gate closing, only starting. The `ready` flag reflects this
    and is derived on read, never stored.
-2. **Checks gate** — a task can't enter a `closed` state unless all its `checks` pass.
+2. **Checks gate**: a task can't enter a `closed` state unless all its `checks` pass.
    - Zero checks ⇒ passes vacuously.
    - On closing, if checks aren't already all `pass`, the engine **auto-runs** the `cmd`
      checks, then closes on all-pass or **refuses** on any fail.
 
 ::: warning
-Reopening a closed task is allowed, but check results are **not** reset on reopen — they keep
+Reopening a closed task is allowed, but check results are **not** reset on reopen; they keep
 their last value, so a re-close reuses them. Closing re-runs `cmd` checks fresh, so a stale
 `pass` from an earlier attempt still can't slip a broken close through.
 :::
@@ -33,27 +33,27 @@ file.
 | `cmd` | yes | executed; exit code decides pass/fail |
 | `manual` | no | set by attestation, not execution |
 
-- A check **with** a `cmd` is executed via `sh -c "<cmd>"` — any shell line works
+- A check **with** a `cmd` is executed via `sh -c "<cmd>"`; any shell line works
   (`go test ./...`, `pytest -q && ruff check .`, `./scripts/verify.sh`).
-- A check **without** a `cmd` is **manual** — its `result` is set by attestation, not
+- A check **without** a `cmd` is **manual**: its `result` is set by attestation, not
   execution. A pending manual check blocks closing until it's resolved.
 
 ## The shell
 
-Command checks run in a **POSIX shell** so a task's `cmd` behaves the same on every machine.
+Command checks run in a **POSIX shell** so a task's `cmd` behaves identically on every machine.
 By default cairn uses `sh`, which must be on your `PATH`:
 
-- **macOS / Linux** — works out of the box.
-- **Windows** — install **Git Bash** or **WSL** (which provide `sh`). A bare `cmd`/PowerShell
+- **macOS / Linux**: works without extra setup.
+- **Windows**: install **Git Bash** or **WSL** (which provide `sh`). A bare `cmd`/PowerShell
   install has no `sh`.
-- Override the shell with the **`CAIRN_SHELL`** environment variable — set it to a shell on your
+- Override the shell with the **`CAIRN_SHELL`** environment variable. Set it to a shell on your
   `PATH` (e.g. an absolute path to `sh`, or `bash`).
 
 If the shell can't be found, cairn fails the run with a clear message rather than a cryptic
 per-check error:
 
 ```
-check: shell "sh" not found on PATH — install a POSIX shell (Git Bash or WSL on Windows)
+check: shell "sh" not found on PATH. Install a POSIX shell (Git Bash or WSL on Windows),
 or set CAIRN_SHELL to one
 ```
 

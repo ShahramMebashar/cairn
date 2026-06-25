@@ -5,7 +5,7 @@
 <h1 align="center">cairn</h1>
 
 <p align="center">
-  Repo-native task management — one task graph your agents and you share.
+  Repo-native task management. One task graph your agents and you share.
 </p>
 
 <p align="center">
@@ -22,7 +22,7 @@
 
 cairn is a task graph that lives as **Markdown files in your repository**. A single Go binary
 (`cairn`) serves it to AI agents over [MCP](https://modelcontextprotocol.io) and to humans over
-a clean web UI. One source of truth — the files. One rule-set — `internal/task`. No database.
+a clean web UI. One source of truth: the files. One rule-set: `internal/task`. No database.
 
 - **Lives in your repo.** A task is Markdown (YAML frontmatter for the machine, a prose body for
   humans). Tasks branch, merge, and review like code; a task's history *is* its git history.
@@ -31,7 +31,7 @@ a clean web UI. One source of truth — the files. One rule-set — `internal/ta
 - **One rule-set, two front-ends.** The web UI and the MCP server are thin adapters over the
   same engine, so an agent and a human always see the same gates and the same readiness.
 - **Connect any agent in one click.** The Connect page detects installed agents and writes their
-  MCP config for you — each under its own identity.
+  MCP config for you, each under its own identity.
 
 ## Quickstart
 
@@ -40,7 +40,7 @@ make build              # -> bin/cairn
 cairn web --repo .      # open the board in your browser
 ```
 
-Then open the **Connect** page and wire up an agent in one click — or do it by hand:
+Then open the **Connect** page and wire up an agent in one click, or do it by hand:
 
 ```sh
 claude mcp add cairn -- "$(pwd)/bin/cairn" serve --actor agent:claude --repo "$(pwd)"
@@ -76,7 +76,7 @@ This repo dogfoods cairn: its own work is tracked in `.cairn/`. See
 
 ## Security
 
-cairn is a **local, single-user** tool with no authentication by design — see
+cairn is a **local, single-user** tool with no authentication by design. See
 [SECURITY.md](SECURITY.md) for the trust model and how to report a vulnerability.
 
 ## License

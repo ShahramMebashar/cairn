@@ -59,13 +59,13 @@ Tool parameters live in the [MCP tools reference](/reference/mcp-tools).
 
 Workflow status and execution state are separate:
 
-- **Active** — an active session has a recent heartbeat.
-- **Stalled** — the heartbeat is older than `session_stale_after` (default `5m`). This is
+- **Active**: an active session has a recent heartbeat.
+- **Stalled**: the heartbeat is older than `session_stale_after` (default `5m`). This is
   derived from local time; no repair write is required.
-- **Awaiting review** — the latest attempt finished and the task is in the configured review
+- **Awaiting review**: the latest attempt finished and the task is in the configured review
   state.
 
-The web UI exposes these as first-class sidebar views. Task rows carry a compact execution
+The web UI exposes these as sidebar views. Task rows carry a compact execution
 signal, and task detail shows progress, heartbeat age, actor/client/model, branch/worktree,
 cancellation reason, and final summary.
 
