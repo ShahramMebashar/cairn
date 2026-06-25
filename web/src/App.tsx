@@ -13,7 +13,11 @@ import { BoardView } from "@/pages/BoardView";
 import { TaskDetail } from "@/pages/TaskDetail";
 import { Graph } from "@/pages/Graph";
 import { CommandPalette } from "@/components/CommandPalette";
+import { CaptureView } from "@/components/CaptureView";
+import { SettingsDialog } from "@/components/SettingsDialog";
 import { useStatus, useTaskEvents } from "@/lib/queries";
+import { useDeepLinks, useDesktopMenu, useTrayMenu, useUpdater } from "@/lib/desktop-hooks";
+import { isTauri, pickFolder } from "@/lib/tauri";
 import {
   forget,
   lastWorkspace,
@@ -26,11 +30,38 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, retry: false } },
 });
 
+// The global quick-add window loads the SPA at #capture and renders only the capture UI.
+function isCaptureRoute(): boolean {
+  return window.location.hash.replace(/^#\/?/, "") === "capture";
+}
+
+// macOS uses a frameless window (titleBarStyle: Overlay) — the traffic lights float over a
+// slim draggable strip, Linear-style. Other platforms keep their native title bar.
+function isMacDesktop(): boolean {
+  return isTauri() && typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent);
+}
+
+// TitleBar is the draggable region that replaces the native title bar on macOS. The OS
+// renders the traffic lights over its left; the rest drags the window.
+function TitleBar() {
+  if (!isMacDesktop()) return null;
+  return <div data-tauri-drag-region className="h-7 shrink-0 bg-app" />;
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider delayDuration={200}>
-        <Flow />
+        {isCaptureRoute() ? (
+          <CaptureView />
+        ) : (
+          <div className="flex h-screen flex-col bg-app">
+            <TitleBar />
+            <div className="min-h-0 flex-1">
+              <Flow />
+            </div>
+          </div>
+        )}
         <Toaster richColors />
       </TooltipProvider>
     </QueryClientProvider>
@@ -84,6 +115,7 @@ function useRoute(): Route {
 
 function Flow() {
   const route = useRoute();
+  useDeepLinks(); // route cairn:// opens (desktop only; no-op in the browser)
 
   const open = (path: string) => {
     window.location.hash = hashFor(registerWorkspace(path), { kind: "list", filter: "all" });
@@ -178,6 +210,7 @@ function Workspace({
 }) {
   const [creating, setCreating] = useState(false);
   const [createParent, setCreateParent] = useState<string | undefined>(undefined);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const newTask = () => {
     setCreateParent(undefined);
     setCreating(true);
@@ -189,8 +222,32 @@ function Workspace({
 
   useTaskEvents(path); // live board/task updates from any actor via SSE
 
+  // Desktop integration (no-ops in the browser): live tray menu, update checks, native menu.
+  const checkUpdates = useUpdater();
+  const openFolder = async () => {
+    const picked = await pickFolder();
+    if (picked) window.location.hash = `#/${registerWorkspace(picked)}/all`;
+  };
+  useTrayMenu(path, {
+    openTask: (id) => navigate({ kind: "task", id }),
+    openFilter: (f) => navigate({ kind: "list", filter: f as Filter }),
+    switchProject: (slug) => {
+      window.location.hash = `#/${slug}/all`;
+    },
+    newTask,
+    openSettings: () => setSettingsOpen(true),
+  });
+  useDesktopMenu({
+    "menu:new_task": newTask,
+    "menu:open_folder": () => void openFolder(),
+    "menu:board": () => navigate({ kind: "board" }),
+    "menu:graph": () => navigate({ kind: "graph" }),
+    "menu:settings": () => setSettingsOpen(true),
+    "menu:check_updates": () => void checkUpdates(true),
+  });
+
   return (
-    <div className="flex h-screen overflow-hidden bg-app text-foreground">
+    <div className="flex h-full overflow-hidden bg-app text-foreground">
       <AppSidebar
         path={path}
         status={status}
@@ -203,6 +260,7 @@ function Workspace({
         onChangeFolder={onChangeFolder}
         onNewTask={newTask}
         onOpenTask={(id) => navigate({ kind: "task", id })}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
       <main className="min-w-0 flex-1 p-2 pl-0">
         <div className="flex h-full flex-col overflow-hidden rounded-xl border bg-panel shadow-xs">
@@ -257,13 +315,18 @@ function Workspace({
         onGraph={() => navigate({ kind: "graph" })}
         onBoard={() => navigate({ kind: "board" })}
       />
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        onCheckUpdates={() => void checkUpdates(true)}
+      />
     </div>
   );
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
+    <div className="flex h-full items-center justify-center bg-background p-6 text-foreground">
       {children}
     </div>
   );

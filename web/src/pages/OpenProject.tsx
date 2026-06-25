@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, Clock, FolderOpen, Loader2 } from "lucide-react";
+import { ArrowRight, Clock, FolderOpen, FolderSearch, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import * as api from "@/lib/api";
+import { isTauri, pickFolder } from "@/lib/tauri";
 
 const RECENT_KEY = "cairn-recent-folders";
 
@@ -51,8 +52,17 @@ export function OpenProject({
     }
   }
 
+  // Native OS folder picker, desktop only. Selecting a folder opens it immediately.
+  async function browse() {
+    const picked = await pickFolder();
+    if (picked) {
+      setPath(picked);
+      open(picked);
+    }
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
+    <div className="flex h-full items-center justify-center bg-background p-6 text-foreground">
       <div className="w-full max-w-md">
         <div className="mb-6 flex items-center gap-3">
           <span className="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground">
@@ -89,6 +99,12 @@ export function OpenProject({
               Open
             </Button>
           </div>
+          {isTauri() && (
+            <Button variant="outline" onClick={browse} disabled={busy} className="mt-2 w-full">
+              <FolderSearch className="size-4" />
+              Choose folder…
+            </Button>
+          )}
           {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
 
           {recents.length > 0 && (

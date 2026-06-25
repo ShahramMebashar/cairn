@@ -1,0 +1,24 @@
+id: ses_c9e4783b5cb331eed0069d3e
+task: PROJ-2anjy1mqaq
+attempt: att_c9e4783b5cb331eed0069d3e
+actor: agent:claude
+client: claude
+model: claude-opus-4-8
+status: finished
+idempotency_key: desktop-tauri-2026-06-25-a
+started_at: 2026-06-25T06:35:53.199772Z
+branch: main
+ended_at: 2026-06-25T06:54:13Z
+head_finished: fc7511ea1d3e4860e4acf42c911412ca64bc73e9
+summary: |-
+  Packaged cairn as a cross-platform Tauri desktop app (branch feat/desktop-tauri, not yet committed).
+
+  Go core: web/embed.go embeds the built UI; internal/server now serves the SPA at /, GET /healthz, and MCP over Streamable HTTP at /mcp?repo=&actor= (per-connection repo+actor, 400 on missing/invalid). cmd/cairn web binds 127.0.0.1:7777 with next-free-port fallback, prints CAIRN_WEB_URL on stdout, and --parent-watch shuts down on stdin EOF.
+
+  Desktop: web/src-tauri/ (tauri.conf.json, Cargo.toml, build.rs, src/main.rs, src/lib.rs, capabilities, icons from app-icon.svg). lib.rs spawns the cairn sidecar, reads the URL from stdout, polls /healthz, navigates the webview, and kills the child on quit. scripts/build-sidecar.mjs builds the Go binary as the triple-named sidecar; scripts/set-desktop-version.mjs stamps tag versions; scripts/keep-dist.mjs preserves the embed placeholder across vite builds.
+
+  Frontend: native folder picker in OpenProject (web/src/lib/tauri.ts), and a "Connect an agent" dialog (HTTP + stdio snippets) wired into AppSidebar.
+
+  Build/CI: Makefile desktop/desktop-dev/sidecar targets; .github/workflows/ci.yml (go test/vet, frontend build, no-bundle desktop check) and release.yml (mac/linux/windows installers on v* tags, unsigned MVP).
+
+  Verified: go vet + go test green; pnpm build green; full pnpm tauri:build produced Cairn.app + sidecar; launched the packaged app — it spawns the server, serves the UI, answers MCP initialize, and the sidecar dies on quit. Open gates: not committed yet; signing deferred; local DMG packaging needs a GUI runner (works on CI macos-14); pre-existing repo eslint debt left out of CI.

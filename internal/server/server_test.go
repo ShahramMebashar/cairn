@@ -288,6 +288,26 @@ func TestListIncludesUpdatedAt(t *testing.T) {
 	}
 }
 
+func TestHealthz(t *testing.T) {
+	_, h := newServer(t)
+	code, body := raw(h, "GET", "/healthz", "")
+	if code != http.StatusOK || strings.TrimSpace(body) != "ok" {
+		t.Fatalf("healthz = %d %q, want 200 ok", code, body)
+	}
+}
+
+func TestMCPEndpointValidation(t *testing.T) {
+	s, h := newServer(t)
+	// Missing ?actor -> 400 with a helpful message.
+	if code, body := raw(h, "POST", "/mcp?repo="+s.defaultRoot, `{}`); code != http.StatusBadRequest || !strings.Contains(body, "actor") {
+		t.Fatalf("missing actor = %d %s, want 400 mentioning actor", code, body)
+	}
+	// Unknown ?repo -> 400.
+	if code, _ := raw(h, "POST", "/mcp?actor=agent:x&repo=/no/such/dir", `{}`); code != http.StatusBadRequest {
+		t.Fatalf("bad repo, want 400")
+	}
+}
+
 func raw(h http.Handler, method, path, body string) (int, string) {
 	var r *http.Request
 	if body != "" {

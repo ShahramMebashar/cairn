@@ -30,6 +30,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -37,11 +38,14 @@ import (
 	"strconv"
 	"strings"
 
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"cairn/internal/mcp"
 	"cairn/internal/repo"
 	"cairn/internal/session"
 	"cairn/internal/store"
 	"cairn/internal/task"
+	"cairn/web"
 )
 
 // Server serves the web API. defaultRoot is used when a request omits `path`; actor is
@@ -88,7 +92,69 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/tasks/{id}/note", s.handleNote)
 	mux.HandleFunc("PATCH /api/tasks/{id}/notes/{note}", s.handleEditNote)
 	mux.HandleFunc("DELETE /api/tasks/{id}/notes/{note}", s.handleDeleteNote)
+
+	// Readiness probe for the Tauri shell: no ?path needed, returns once the
+	// server is accepting requests.
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte("ok"))
+	})
+
+	// MCP over Streamable HTTP, so an agent can connect to the running app by URL
+	// (the same rule-set as `cairn serve` and the /api front-end). Each connection
+	// binds its own repo + actor via the query: /mcp?repo=/abs/path&actor=agent:x.
+	mux.Handle("/mcp", s.mcpHandler())
+	mux.Handle("/mcp/", s.mcpHandler())
+
+	// Embedded UI last: the catch-all serves the SPA, falling back to index.html.
+	mux.Handle("/", spaHandler(web.FS()))
 	return mux
+}
+
+// mcpHandler serves MCP over Streamable HTTP. It validates ?repo and ?actor up
+// front (clear 400s) and builds a per-connection mcp.Server bound to that repo
+// and identity, reusing the same Service rule-set as the stdio server.
+func (s *Server) mcpHandler() http.Handler {
+	h := mcpsdk.NewStreamableHTTPHandler(func(r *http.Request) *mcpsdk.Server {
+		root, err := s.resolveRoot(r.URL.Query().Get("repo"))
+		if err != nil {
+			return nil
+		}
+		actor := r.URL.Query().Get("actor")
+		if actor == "" {
+			return nil
+		}
+		// Auto-init so a freshly opened project just works (mirrors `cairn serve`).
+		if err := repo.Init(root, ""); err != nil {
+			return nil
+		}
+		client := r.URL.Query().Get("client")
+		return mcp.NewServer(mcp.NewServiceWithClient(store.New(root), actor, client, nil))
+	}, nil)
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("actor") == "" {
+			http.Error(w, "missing ?actor= (e.g. agent:claude-1)", http.StatusBadRequest)
+			return
+		}
+		if _, err := s.resolveRoot(r.URL.Query().Get("repo")); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
+}
+
+// spaHandler serves embedded static assets, falling back to index.html so
+// client-side routes resolve. Tolerates a missing index.html (placeholder dist)
+// by letting the file server return its own 404.
+func spaHandler(root fs.FS) http.Handler {
+	fileServer := http.FileServer(http.FS(root))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := fs.Stat(root, strings.TrimPrefix(r.URL.Path, "/")); err != nil && r.URL.Path != "/" {
+			r.URL.Path = "/"
+		}
+		fileServer.ServeHTTP(w, r)
+	})
 }
 
 // Run serves on addr until the process exits.

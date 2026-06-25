@@ -1,0 +1,19 @@
+id: ses_0275164806eb8ffcd2ce900a
+task: PROJ-2ant2dddc5
+attempt: att_0275164806eb8ffcd2ce900a
+actor: agent:claude
+client: claude
+model: claude-opus-4-8
+status: finished
+idempotency_key: tray-hub-2026-06-25-d
+started_at: 2026-06-25T08:37:40.910616Z
+branch: feat/desktop-tauri
+ended_at: 2026-06-25T08:44:25Z
+summary: |-
+  Live tray hub implemented on branch feat/desktop-tauri (uncommitted).
+
+  Rust (lib.rs): replaced set_tray_badge with a generic update_tray(TrayMenu{tooltip,title,sections:[[TrayItem{id,label,checked?,enabled?}]]}) command that rebuilds the tray menu (CheckMenuItem for toggles, disabled rows for headers) + sets tooltip and macOS menubar title. handle_menu now emits a single tray:menu event with the item id for all dynamic items (showing the window except for toggle:*); tray_open/tray_quit handled natively.
+
+  Frontend: api.listSessions + useSessions(path) (project-wide sessions, live via existing SSE session-changed invalidation). desktop.ts: updateTray, onTrayEvent, DND (dndEnabled/setDnd; notify() now respects DND). useTrayMenu(path, handlers) builds the model from useTasks (counts: awaiting_review/active/stalled/ready; awaiting-review task list) + useSessions (active/stalled agent rows with live progress + relative heartbeat, stalled flagged) + project switcher (when >1 workspace) + DND toggle + Open/Settings/Quit; debounced 250ms and diffed against last JSON; dispatches tray:menu → openTask/openFilter/switchProject/newTask/openSettings/toggle-DND. Wired in App.tsx Workspace (replaced useTrayBadge).
+
+  Verified: go vet+test, frontend tsc+build, cargo check all green; full tauri build → Cairn.app launches and runs (server/MCP healthy). Manual check pending: the live tray content + clicks + project switcher + DND need a project open in a GUI session to confirm (screenshots blocked in this env; app left running for the user to inspect). DMG packaging still headless-only locally.

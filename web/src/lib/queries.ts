@@ -64,6 +64,15 @@ export function useTaskSessions(path: string, id: string | null) {
   });
 }
 
+// useSessions lists every session for the project (powers the tray's live agent rows). Keyed
+// under sessionsKey(path) so the SSE `session-changed` invalidation keeps it fresh.
+export function useSessions(path: string) {
+  return useQuery({
+    queryKey: sessionsKey(path, "__all__"),
+    queryFn: () => api.listSessions(path),
+  });
+}
+
 // useTaskEvents subscribes to the server's SSE stream for `path` and invalidates the
 // affected React Query caches, so the board and open task reflect changes made by ANY
 // actor (including MCP agents in another process), not just this UI's own mutations. One

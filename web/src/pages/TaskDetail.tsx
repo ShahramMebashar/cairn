@@ -1,12 +1,14 @@
 import { useState } from "react";
 import {
   ArrowLeft,
+  Bot,
   Check as CheckMark,
   ChevronRight,
   Circle,
   CircleCheck,
   CircleX,
   CornerLeftUp,
+  Link2,
   Loader2,
   MoreHorizontal,
   Pencil,
@@ -16,6 +18,9 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
+import { toast } from "sonner";
+import { agentPromptForTask, taskDeepLink } from "@/lib/connect";
+import { currentActor } from "@/lib/identity";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -127,6 +132,24 @@ export function TaskDetail({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onSelect={() => {
+                  navigator.clipboard.writeText(taskDeepLink(path, task.id));
+                  toast.success("Link copied");
+                }}
+              >
+                <Link2 /> Copy link
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  navigator.clipboard.writeText(
+                    agentPromptForTask(task, path, currentActor(), window.location.origin),
+                  );
+                  toast.success("Agent prompt copied");
+                }}
+              >
+                <Bot /> Copy as agent prompt
+              </DropdownMenuItem>
               <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(true)}>
                 <Trash2 /> Delete task
               </DropdownMenuItem>

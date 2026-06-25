@@ -19,7 +19,7 @@ export function InitProject({
   const init = useInitRepo(path);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
+    <div className="flex h-full items-center justify-center bg-background p-6 text-foreground">
       <div className="w-full max-w-md">
         <button
           onClick={onChangeFolder}

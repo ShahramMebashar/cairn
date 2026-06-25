@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { getTheme, toggleTheme, type Theme } from "@/lib/theme";
 import { NotificationBell } from "@/components/NotificationBell";
 import { HelpDialog } from "@/components/HelpDialog";
+import { ConnectAgentDialog } from "@/components/ConnectAgentDialog";
 import { Assignee } from "@/components/Assignee";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -61,6 +62,7 @@ export function AppSidebar({
   onChangeFolder,
   onNewTask,
   onOpenTask,
+  onOpenSettings,
 }: {
   path: string;
   status: Status;
@@ -73,9 +75,11 @@ export function AppSidebar({
   onChangeFolder: () => void;
   onNewTask: () => void;
   onOpenTask: (id: string) => void;
+  onOpenSettings: () => void;
 }) {
   const [theme, setTheme] = useState<Theme>(getTheme());
   const [helpOpen, setHelpOpen] = useState(false);
+  const [connectOpen, setConnectOpen] = useState(false);
   const { actor, setName } = useIdentity(status.suggestedActor);
   const { data: tasks } = useTasks(path);
   const folderName = status.root.split("/").filter(Boolean).pop() ?? status.root;
@@ -104,6 +108,8 @@ export function AppSidebar({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onChangeFolder}>Switch folder…</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setConnectOpen(true)}>Connect an agent…</DropdownMenuItem>
+            <DropdownMenuItem onClick={onOpenSettings}>Settings…</DropdownMenuItem>
             <DropdownMenuItem onClick={() => setTheme(toggleTheme())}>
               {theme === "dark" ? "Light theme" : "Dark theme"}
             </DropdownMenuItem>
@@ -212,6 +218,7 @@ export function AppSidebar({
         </div>
       </div>
       <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
+      <ConnectAgentDialog open={connectOpen} onOpenChange={setConnectOpen} path={path} actor={actor} />
     </aside>
   );
 }

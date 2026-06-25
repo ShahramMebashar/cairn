@@ -17,8 +17,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"syscall"
+	"time"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -111,12 +116,75 @@ func runServe(args []string) error {
 
 func runWeb(args []string) error {
 	fs := flag.NewFlagSet("web", flag.ContinueOnError)
-	addr := fs.String("addr", ":8080", "address to listen on")
+	addr := fs.String("addr", ":8080", "address to listen on (a busy port falls back to the next free one)")
 	repoRoot := fs.String("repo", ".", "default repo root (the UI can open other folders)")
 	actor := fs.String("actor", "human:web", "identity stamped on web-driven writes")
+	parentWatch := fs.Bool("parent-watch", false, "shut down when stdin closes (set by the desktop shell)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "cairn web listening on %s (default repo %s)\n", *addr, *repoRoot)
-	return server.New(*repoRoot, *actor).Run(*addr)
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// As a Tauri sidecar the desktop app holds our stdin open; when it exits the
+	// pipe closes (EOF) and we shut down, so the server never outlives the app.
+	// Gated so terminal/CI runs (stdin may be /dev/null → instant EOF) are unaffected.
+	if *parentWatch || os.Getenv("CAIRN_PARENT_WATCH") != "" {
+		go func() {
+			io.Copy(io.Discard, os.Stdin)
+			cancel()
+		}()
+	}
+
+	ln, err := listenWithFallback(*addr)
+	if err != nil {
+		return err
+	}
+
+	// One machine-parseable line on stdout for the desktop shell to read (the port
+	// may differ from the request after fallback); the human line stays on stderr.
+	_, port, _ := net.SplitHostPort(ln.Addr().String())
+	url := "http://127.0.0.1:" + port
+	fmt.Printf("CAIRN_WEB_URL=%s\n", url)
+	os.Stdout.Sync()
+	fmt.Fprintf(os.Stderr, "cairn web listening on %s (default repo %s)\n", url, *repoRoot)
+
+	srv := &http.Server{Handler: server.New(*repoRoot, *actor).Handler()}
+	go func() {
+		<-ctx.Done()
+		sctx, c := context.WithTimeout(context.Background(), 5*time.Second)
+		defer c()
+		srv.Shutdown(sctx)
+	}()
+	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
+}
+
+// listenWithFallback binds addr; if its port is taken it scans the next 20 ports,
+// then falls back to an OS-assigned one — so the desktop app always comes up even
+// when the preferred port (7777) is already in use.
+func listenWithFallback(addr string) (net.Listener, error) {
+	ln, err := net.Listen("tcp", addr)
+	if err == nil {
+		return ln, nil
+	}
+	host, portStr, perr := net.SplitHostPort(addr)
+	if perr != nil {
+		return nil, err
+	}
+	base, aerr := strconv.Atoi(portStr)
+	if aerr != nil || base == 0 {
+		return nil, err
+	}
+	for p := base + 1; p <= base+20; p++ {
+		if l, e := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(p))); e == nil {
+			return l, nil
+		}
+	}
+	return net.Listen("tcp", net.JoinHostPort(host, "0"))
 }
