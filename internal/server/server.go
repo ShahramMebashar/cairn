@@ -30,6 +30,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/http"
 	"net/url"
@@ -257,7 +258,9 @@ type initReq struct {
 
 func (s *Server) handleInit(w http.ResponseWriter, r *http.Request) {
 	var req initReq
-	decode(r, &req)
+	if !decode(w, r, &req) {
+		return
+	}
 	root, err := s.resolveRoot(req.Path)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errBody(err))
@@ -327,7 +330,9 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req createReq
-	decode(r, &req)
+	if !decode(w, r, &req) {
+		return
+	}
 	checks := make([]task.Check, 0, len(req.Checks))
 	for _, c := range req.Checks {
 		checks = append(checks, task.Check{Desc: c.Desc, Cmd: c.Cmd, Type: c.Type, Cwd: c.Cwd, Timeout: c.Timeout, Result: "pending"})
@@ -362,7 +367,9 @@ func (s *Server) handleReorder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req reorderReq
-	decode(r, &req)
+	if !decode(w, r, &req) {
+		return
+	}
 	doc, err := svc.Reorder(r.PathValue("id"), req.Rank)
 	if err != nil {
 		writeErr(w, err)
@@ -377,7 +384,9 @@ func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req updateReq
-	decode(r, &req)
+	if !decode(w, r, &req) {
+		return
+	}
 	f := mcp.UpdateFields{Priority: req.Priority, Labels: req.Labels, Parent: req.Parent, Title: req.Title, Body: req.Body}
 	if req.Checks != nil {
 		checks := make([]task.Check, 0, len(*req.Checks))
@@ -436,7 +445,9 @@ func (s *Server) handleEditNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req editNoteReq
-	decode(r, &req)
+	if !decode(w, r, &req) {
+		return
+	}
 	noteID, index := noteRef(r)
 	doc, err := svc.EditNote(r.PathValue("id"), noteID, index, req.Text)
 	if err != nil {
@@ -470,8 +481,10 @@ func (s *Server) handleTransition(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req transitionReq
-	decode(r, &req)
-	doc, err := svc.Transition(r.PathValue("id"), req.To)
+	if !decode(w, r, &req) {
+		return
+	}
+	doc, err := svc.TransitionContext(r.Context(), r.PathValue("id"), req.To)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -502,8 +515,10 @@ func (s *Server) handleRunChecks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req runChecksReq
-	decode(r, &req)
-	doc, err := svc.RunChecks(r.PathValue("id"), req.Only)
+	if !decode(w, r, &req) {
+		return
+	}
+	doc, err := svc.RunChecksContext(r.Context(), r.PathValue("id"), req.Only)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -522,7 +537,9 @@ func (s *Server) handleAttest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req attestReq
-	decode(r, &req)
+	if !decode(w, r, &req) {
+		return
+	}
 	doc, err := svc.Attest(r.PathValue("id"), req.Index, req.Pass == nil || *req.Pass)
 	if err != nil {
 		writeErr(w, err)
@@ -541,7 +558,9 @@ func (s *Server) handleNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req noteReq
-	decode(r, &req)
+	if !decode(w, r, &req) {
+		return
+	}
 	doc, err := svc.Note(r.PathValue("id"), req.Text)
 	if err != nil {
 		writeErr(w, err)
@@ -658,10 +677,16 @@ func dtoFromDoc(svc *mcp.Service, doc *store.Doc) taskDTO {
 
 // --- responses ---
 
-func decode(r *http.Request, v any) {
-	if r.Body != nil {
-		_ = json.NewDecoder(r.Body).Decode(v)
+func decode(w http.ResponseWriter, r *http.Request, v any) bool {
+	if r.Body == nil {
+		return true
 	}
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(v); err != nil && !errors.Is(err, io.EOF) {
+		writeJSON(w, http.StatusBadRequest, errBody(fmt.Errorf("invalid JSON: %w", err)))
+		return false
+	}
+	return true
 }
 
 func errBody(err error) map[string]string { return map[string]string{"error": err.Error()} }
@@ -686,6 +711,8 @@ func writeErr(w http.ResponseWriter, err error) {
 	case errors.Is(err, task.ErrDepsNotClosed),
 		errors.Is(err, task.ErrChecksNotPassed),
 		errors.Is(err, task.ErrUnknownState),
+		errors.Is(err, store.ErrInvalidID),
+		errors.Is(err, store.ErrInvalidSessionID),
 		errors.Is(err, task.ErrParentMissing),
 		errors.Is(err, task.ErrParentCycle),
 		errors.Is(err, task.ErrDanglingDep),

@@ -1,7 +1,7 @@
 ---
 id: PROJ-2anjy1mqaq
 title: Package cairn as a cross-platform Tauri desktop app
-status: in_review
+status: done
 priority: high
 labels: [desktop, tauri, build]
 provenance:
@@ -16,6 +16,10 @@ provenance:
   - {who: 'agent:claude', at: '2026-06-25T07:12:51Z', did: began session ses_07d73d8770a7816997bca35a}
   - {who: 'agent:claude', at: '2026-06-25T07:17:01Z', did: ran checks}
   - {who: 'human:shaho', at: '2026-06-25T08:33:13Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-25T12:09:26Z', did: attested, text: check 2 pass}
+  - {who: 'human:shaho', at: '2026-06-25T12:09:31Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-25T12:09:41Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-25T12:09:41Z', did: transitioned to done}
 assignee: agent:claude
 active_attempt: att_07d73d8770a7816997bca35a
 checks:
@@ -27,7 +31,7 @@ checks:
     result: pass
   - desc: Desktop bundle builds installers on CI (mac DMG needs a GUI runner; verified Cairn.app + sidecar + launch locally)
     type: manual
-    result: pending
+    result: pass
 ---
 Wrap cairn as a light, native desktop app (macOS/Linux/Windows) using Tauri, mirroring the dbugd recipe.
 

@@ -79,6 +79,16 @@ func TestGetParses(t *testing.T) {
 	}
 }
 
+func TestGetRejectsPathLikeID(t *testing.T) {
+	s := New(repo(t, map[string]string{"PROJ-001": minimalTask}))
+	if _, err := s.Get("../AGENTS"); !errors.Is(err, ErrInvalidID) {
+		t.Fatalf("Get path-like id = %v, want ErrInvalidID", err)
+	}
+	if err := s.DeleteTask("../AGENTS", "agent:test"); !errors.Is(err, ErrInvalidID) {
+		t.Fatalf("DeleteTask path-like id = %v, want ErrInvalidID", err)
+	}
+}
+
 func TestListValidatesDangling(t *testing.T) {
 	s := New(repo(t, map[string]string{
 		"PROJ-009": "---\nid: PROJ-009\ntitle: x\nstatus: backlog\ndeps: [GHOST]\n---\n",

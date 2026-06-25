@@ -47,6 +47,13 @@ func TestCreateAndGet(t *testing.T) {
 	}
 }
 
+func TestCreateRejectsBlankTitle(t *testing.T) {
+	svc := service(t, "agent:a")
+	if _, err := svc.Create(store.Draft{Title: "  "}); !errors.Is(err, ErrEmptyTitle) {
+		t.Fatalf("Create blank title = %v, want ErrEmptyTitle", err)
+	}
+}
+
 func TestCreateRejectsMissingDep(t *testing.T) {
 	svc := service(t, "agent:a")
 	if _, err := svc.Create(store.Draft{Title: "x", Deps: []string{"GHOST"}}); err == nil {

@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -173,6 +174,9 @@ func (svc *Service) Get(id string) (*store.Doc, error) {
 // Create mints a new task in the initial state. Deps must already exist, or the graph
 // would be born dangling (SPEC §4).
 func (svc *Service) Create(d store.Draft) (*store.Doc, error) {
+	if strings.TrimSpace(d.Title) == "" {
+		return nil, ErrEmptyTitle
+	}
 	if !task.ValidPriority(d.Priority) {
 		return nil, fmt.Errorf("%w: %q", task.ErrInvalidPriority, d.Priority)
 	}
@@ -312,6 +316,11 @@ func (svc *Service) Claim(id string) (*store.Doc, error) {
 // checks have not passed, it auto-runs the checks and retries — refusing only if they
 // still don't pass. Deps-gate and unknown-state failures are returned without side effects.
 func (svc *Service) Transition(id, to string) (*store.Doc, error) {
+	return svc.TransitionContext(context.Background(), id, to)
+}
+
+// TransitionContext is Transition with caller-driven cancellation for command checks.
+func (svc *Service) TransitionContext(ctx context.Context, id, to string) (*store.Doc, error) {
 	doc, err := svc.store.Get(id)
 	if err != nil {
 		return nil, err
@@ -339,7 +348,7 @@ func (svc *Service) Transition(id, to string) (*store.Doc, error) {
 		return svc.commitTransition(doc, to) // gateErr is nil: only closed/review gate checks
 	}
 
-	if err := svc.runCmdChecks(doc, cfg, nil); err != nil {
+	if err := svc.runCmdChecks(ctx, doc, cfg, nil); err != nil {
 		return nil, err
 	}
 	doc.AppendProvenance(svc.actor, "ran checks", "", svc.now())
@@ -370,6 +379,11 @@ func (svc *Service) commitTransition(doc *store.Doc, to string) (*store.Doc, err
 // RunChecks runs the cmd checks (all by default, or the indices in `only`) and writes
 // their results. Manual checks have no cmd and are skipped (SPEC §6, §7).
 func (svc *Service) RunChecks(id string, only []int) (*store.Doc, error) {
+	return svc.RunChecksContext(context.Background(), id, only)
+}
+
+// RunChecksContext is RunChecks with caller-driven cancellation for command checks.
+func (svc *Service) RunChecksContext(ctx context.Context, id string, only []int) (*store.Doc, error) {
 	doc, err := svc.store.Get(id)
 	if err != nil {
 		return nil, err
@@ -385,7 +399,7 @@ func (svc *Service) RunChecks(id string, only []int) (*store.Doc, error) {
 			filter[i] = true
 		}
 	}
-	if err := svc.runCmdChecks(doc, cfg, filter); err != nil {
+	if err := svc.runCmdChecks(ctx, doc, cfg, filter); err != nil {
 		return nil, err
 	}
 	doc.AppendProvenance(svc.actor, "ran checks", "", svc.now())
@@ -397,7 +411,7 @@ func (svc *Service) RunChecks(id string, only []int) (*store.Doc, error) {
 
 // runCmdChecks executes each cmd check (optionally filtered) and records pass/fail on the
 // doc. It mutates but does not save.
-func (svc *Service) runCmdChecks(doc *store.Doc, cfg config.Config, only map[int]bool) error {
+func (svc *Service) runCmdChecks(ctx context.Context, doc *store.Doc, cfg config.Config, only map[int]bool) error {
 	runner := check.Runner{Root: svc.store.Root(), LogDir: svc.store.RunsDir(), Now: svc.now}
 	for i, c := range doc.Task.Checks {
 		if only != nil && !only[i] {
@@ -406,7 +420,7 @@ func (svc *Service) runCmdChecks(doc *store.Doc, cfg config.Config, only map[int
 		if c.Cmd == "" {
 			continue // manual check: result set by attestation, not execution
 		}
-		res, err := runner.Run(doc.Task.ID, check.Spec{Cmd: c.Cmd, Cwd: c.Cwd, Timeout: cfg.CheckTimeout(c.Timeout)})
+		res, err := runner.RunContext(ctx, doc.Task.ID, check.Spec{Cmd: c.Cmd, Cwd: c.Cwd, Timeout: cfg.CheckTimeout(c.Timeout)})
 		if err != nil {
 			return err
 		}

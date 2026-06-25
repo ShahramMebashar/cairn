@@ -107,8 +107,8 @@ func NewServer(svc *Service) *mcpsdk.Server {
 
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "transition",
 		Description: "Move a task to a new state. Applies the deps and checks gates; closing auto-runs checks and refuses on failure."},
-		func(_ context.Context, _ *mcpsdk.CallToolRequest, in transitionIn) (*mcpsdk.CallToolResult, taskOut, error) {
-			doc, err := svc.Transition(in.ID, in.To)
+		func(ctx context.Context, _ *mcpsdk.CallToolRequest, in transitionIn) (*mcpsdk.CallToolResult, taskOut, error) {
+			doc, err := svc.TransitionContext(ctx, in.ID, in.To)
 			if err != nil {
 				return nil, taskOut{}, err
 			}
@@ -117,8 +117,8 @@ func NewServer(svc *Service) *mcpsdk.Server {
 
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "run_checks",
 		Description: "Run a task's cmd checks (all by default, or the given indices) and record results. Manual checks are skipped."},
-		func(_ context.Context, _ *mcpsdk.CallToolRequest, in runChecksIn) (*mcpsdk.CallToolResult, taskOut, error) {
-			doc, err := svc.RunChecks(in.ID, in.Only)
+		func(ctx context.Context, _ *mcpsdk.CallToolRequest, in runChecksIn) (*mcpsdk.CallToolResult, taskOut, error) {
+			doc, err := svc.RunChecksContext(ctx, in.ID, in.Only)
 			if err != nil {
 				return nil, taskOut{}, err
 			}

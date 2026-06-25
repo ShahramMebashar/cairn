@@ -23,6 +23,9 @@ var (
 	ErrSessionConflict = errors.New("session changed since it was read")
 	// ErrLiveSession is returned when a task already has a live session.
 	ErrLiveSession = errors.New("task already has a live session")
+	// ErrInvalidSessionID is returned when a caller supplies a session/live id that cannot
+	// be mapped safely to a file in .cairn/sessions or .cairn/live.
+	ErrInvalidSessionID = errors.New("invalid session id")
 )
 
 // SessionDoc is a typed session plus its lossless YAML representation.
@@ -42,8 +45,15 @@ func (s *Store) livePath(id string) string {
 	return filepath.Join(s.liveDir(), id+".json")
 }
 
+func validateSessionID(id string) error {
+	return validateFileID(ErrInvalidSessionID, id)
+}
+
 // GetSession reads one durable session.
 func (s *Store) GetSession(id string) (*SessionDoc, error) {
+	if err := validateSessionID(id); err != nil {
+		return nil, err
+	}
 	b, err := os.ReadFile(s.sessionPath(id))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("%w: %s", ErrSessionNotFound, id)
@@ -158,6 +168,14 @@ func (tx *WriteTx) ReadLive(id string) (*session.Live, error) { return tx.store.
 
 // CreateSession persists a new durable session and optional live state.
 func (s *Store) CreateSession(ctx context.Context, actor string, value session.Session, live *session.Live) (*SessionDoc, error) {
+	if err := validateSessionID(value.ID); err != nil {
+		return nil, err
+	}
+	if live != nil {
+		if err := validateSessionID(live.SessionID); err != nil {
+			return nil, err
+		}
+	}
 	var created *SessionDoc
 	err := s.Write(ctx, actor, "create session", func(tx *WriteTx) error {
 		if current, err := tx.store.LiveSession(value.TaskID); err != nil {
@@ -182,6 +200,9 @@ func (s *Store) CreateSession(ctx context.Context, actor string, value session.S
 
 // SaveSession atomically updates a durable session under the repository lock.
 func (s *Store) SaveSession(ctx context.Context, actor string, d *SessionDoc) error {
+	if err := validateSessionID(d.Session.ID); err != nil {
+		return err
+	}
 	return s.Write(ctx, actor, "save session", func(tx *WriteTx) error {
 		return tx.SaveSession(d)
 	})
@@ -189,6 +210,9 @@ func (s *Store) SaveSession(ctx context.Context, actor string, d *SessionDoc) er
 
 // CreateSession writes a durable session inside an existing transaction.
 func (tx *WriteTx) CreateSession(value session.Session) (*SessionDoc, error) {
+	if err := validateSessionID(value.ID); err != nil {
+		return nil, err
+	}
 	if _, err := os.Stat(tx.store.sessionPath(value.ID)); err == nil {
 		return nil, fmt.Errorf("store: session already exists: %s", value.ID)
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -209,6 +233,9 @@ func (tx *WriteTx) CreateSession(value session.Session) (*SessionDoc, error) {
 
 // SaveSession writes a durable session inside an existing transaction.
 func (tx *WriteTx) SaveSession(d *SessionDoc) error {
+	if err := validateSessionID(d.Session.ID); err != nil {
+		return err
+	}
 	if d.version != "" {
 		current, err := os.ReadFile(tx.store.sessionPath(d.Session.ID))
 		if errors.Is(err, os.ErrNotExist) {
@@ -234,6 +261,9 @@ func (tx *WriteTx) SaveSession(d *SessionDoc) error {
 
 // ReadLive reads ephemeral state. A missing file means no heartbeat has been recorded.
 func (s *Store) ReadLive(sessionID string) (*session.Live, error) {
+	if err := validateSessionID(sessionID); err != nil {
+		return nil, err
+	}
 	b, err := os.ReadFile(s.livePath(sessionID))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -250,6 +280,9 @@ func (s *Store) ReadLive(sessionID string) (*session.Live, error) {
 
 // WriteLive atomically replaces ephemeral state inside an existing transaction.
 func (tx *WriteTx) WriteLive(live session.Live) error {
+	if err := validateSessionID(live.SessionID); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(tx.store.liveDir(), 0o755); err != nil {
 		return fmt.Errorf("store: create live dir: %w", err)
 	}
@@ -263,6 +296,9 @@ func (tx *WriteTx) WriteLive(live session.Live) error {
 
 // DeleteLive removes ephemeral state inside an existing transaction.
 func (tx *WriteTx) DeleteLive(sessionID string) error {
+	if err := validateSessionID(sessionID); err != nil {
+		return err
+	}
 	if err := os.Remove(tx.store.livePath(sessionID)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("store: remove live session %s: %w", sessionID, err)
 	}

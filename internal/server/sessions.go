@@ -48,7 +48,9 @@ func (s *Server) handleBeginSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req beginSessionReq
-	decode(r, &req)
+	if !decode(w, r, &req) {
+		return
+	}
 	view, err := svc.BeginSession(r.Context(), mcp.BeginSessionInput{
 		TaskID: r.PathValue("id"), ExpectedActor: req.ExpectedActor, Client: req.Client,
 		Model: req.Model, Worktree: req.Worktree, Branch: req.Branch, Head: req.Head,
@@ -107,7 +109,9 @@ func (s *Server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req heartbeatReq
-	decode(r, &req)
+	if !decode(w, r, &req) {
+		return
+	}
 	view, err := svc.Heartbeat(r.Context(), mcp.HeartbeatInput{
 		SessionID: r.PathValue("session"), Progress: req.Progress,
 	})
@@ -124,7 +128,9 @@ func (s *Server) handleFinishSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req finishSessionReq
-	decode(r, &req)
+	if !decode(w, r, &req) {
+		return
+	}
 	view, err := svc.FinishSession(r.Context(), mcp.FinishSessionInput{
 		SessionID: r.PathValue("session"), Summary: req.Summary, Head: req.Head,
 	})
@@ -141,7 +147,9 @@ func (s *Server) handleCancelSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req cancelSessionReq
-	decode(r, &req)
+	if !decode(w, r, &req) {
+		return
+	}
 	view, err := svc.CancelSession(r.Context(), mcp.CancelSessionInput{
 		SessionID: r.PathValue("session"), Reason: req.Reason,
 	})

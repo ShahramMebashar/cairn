@@ -1,6 +1,7 @@
 package check
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -93,6 +94,20 @@ func TestRunTimeoutKills(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > 2*time.Second {
 		t.Fatalf("timeout took %s, process not killed promptly", elapsed)
+	}
+}
+
+func TestRunContextCancellationKills(t *testing.T) {
+	r := runner(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	res, err := r.RunContext(ctx, "PROJ-001", Spec{Cmd: "sleep 5"})
+	if err != nil {
+		t.Fatalf("RunContext: %v", err)
+	}
+	if res.Pass {
+		t.Fatalf("got %+v, want canceled failure", res)
 	}
 }
 

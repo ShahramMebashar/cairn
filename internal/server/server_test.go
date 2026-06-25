@@ -150,6 +150,19 @@ func TestTaskLifecycleOverHTTP(t *testing.T) {
 	}
 }
 
+func TestCreateRejectsBadJSONAndBlankTitle(t *testing.T) {
+	_, h := newServer(t)
+	var st statusResp
+	call(t, h, "POST", "/api/init", `{"prefix":"WEB"}`, &st)
+
+	if code, body := raw(h, "POST", "/api/tasks", `{"title":`); code != http.StatusBadRequest || !strings.Contains(body, "invalid JSON") {
+		t.Fatalf("bad JSON = %d %s, want 400 invalid JSON", code, body)
+	}
+	if code, body := raw(h, "POST", "/api/tasks", `{"title":"  "}`); code != http.StatusUnprocessableEntity || !strings.Contains(body, "title") {
+		t.Fatalf("blank title = %d %s, want 422 title error", code, body)
+	}
+}
+
 func TestSessionLifecycleOverHTTP(t *testing.T) {
 	_, h := newServer(t)
 	var st statusResp

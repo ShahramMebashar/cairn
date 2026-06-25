@@ -253,18 +253,19 @@ func (h *Hub) startWatcher(root string) (*rootWatch, error) {
 		return nil, err
 	}
 	cairn := filepath.Join(root, ".cairn")
-	for _, dir := range []string{filepath.Join(cairn, "sessions"), filepath.Join(cairn, "live")} {
+	for _, dir := range []string{cairn, filepath.Join(cairn, "tasks"), filepath.Join(cairn, "sessions"), filepath.Join(cairn, "live")} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			w.Close()
 			return nil, fmt.Errorf("watcher: create %s: %w", dir, err)
 		}
 	}
 	// Watch the dirs, not the files: atomic temp+rename swaps inodes (store.atomicWrite).
-	// A missing dir is not fatal — the workspace may not be initialized yet.
-	_ = w.Add(cairn)
-	_ = w.Add(filepath.Join(cairn, "tasks"))
-	_ = w.Add(filepath.Join(cairn, "sessions"))
-	_ = w.Add(filepath.Join(cairn, "live"))
+	for _, dir := range []string{cairn, filepath.Join(cairn, "tasks"), filepath.Join(cairn, "sessions"), filepath.Join(cairn, "live")} {
+		if err := w.Add(dir); err != nil {
+			w.Close()
+			return nil, fmt.Errorf("watcher: watch %s: %w", dir, err)
+		}
+	}
 
 	rw := &rootWatch{watcher: w, subs: map[int]chan Event{}}
 

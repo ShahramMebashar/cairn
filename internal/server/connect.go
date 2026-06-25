@@ -36,7 +36,9 @@ type connectReq struct {
 
 func (s *Server) handleConnectAgent(w http.ResponseWriter, r *http.Request) {
 	var req connectReq
-	decode(r, &req)
+	if !decode(w, r, &req) {
+		return
+	}
 	root, err := s.resolveRoot(req.Path)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errBody(err))

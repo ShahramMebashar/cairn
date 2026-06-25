@@ -22,6 +22,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"gopkg.in/yaml.v3"
 
@@ -31,6 +32,10 @@ import (
 
 // ErrNotFound is returned when a task id has no file.
 var ErrNotFound = errors.New("task not found")
+
+// ErrInvalidID is returned when a caller supplies a task id that cannot be mapped safely
+// to a file in .cairn/tasks.
+var ErrInvalidID = errors.New("invalid task id")
 
 // ErrConflict is returned when a Doc read by Get is saved after its file changed underneath
 // it (another process/actor wrote first). The caller should re-read and retry rather than
@@ -60,6 +65,27 @@ func (s *Store) configPath() string { return filepath.Join(s.root, ".cairn", "co
 func (s *Store) lockPath() string   { return filepath.Join(s.root, ".cairn", "write.lock") }
 func (s *Store) taskPath(id string) string {
 	return filepath.Join(s.tasksDir(), id+".md")
+}
+
+func validateFileID(kind error, id string) error {
+	if id == "" || id == "." || id == ".." || strings.TrimSpace(id) != id {
+		return fmt.Errorf("%w: %q", kind, id)
+	}
+	for _, r := range id {
+		switch {
+		case r == '-' || r == '_':
+			continue
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			continue
+		default:
+			return fmt.Errorf("%w: %q", kind, id)
+		}
+	}
+	return nil
+}
+
+func validateTaskID(id string) error {
+	return validateFileID(ErrInvalidID, id)
 }
 
 // Root returns the repo root the store is bound to.
@@ -126,6 +152,9 @@ func (c checkFields) toTask() task.Check {
 
 // Get reads and parses one task file.
 func (s *Store) Get(id string) (*Doc, error) {
+	if err := validateTaskID(id); err != nil {
+		return nil, err
+	}
 	b, err := os.ReadFile(s.taskPath(id))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("%w: %s", ErrNotFound, id)
@@ -455,6 +484,9 @@ func (d *Doc) DeleteNote(id string, index int) error {
 // (ValidateParents/ValidateDeps would then fail on load). The scan and unlink happen under
 // the repository write lock so a child created concurrently can't slip through.
 func (s *Store) DeleteTask(id, actor string) error {
+	if err := validateTaskID(id); err != nil {
+		return err
+	}
 	return s.Write(context.Background(), actor, "delete task", func(tx *WriteTx) error {
 		if _, err := os.Stat(s.taskPath(id)); errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("%w: %s", ErrNotFound, id)
@@ -485,6 +517,9 @@ func (s *Store) Save(d *Doc) error {
 // A Doc carrying a version (i.e. read via Get) must still match the on-disk file, else a
 // concurrent writer changed it and we refuse with ErrConflict rather than clobber.
 func (s *Store) save(d *Doc) error {
+	if err := validateTaskID(d.Task.ID); err != nil {
+		return err
+	}
 	if d.version != "" {
 		if err := s.checkVersion(d); err != nil {
 			return err

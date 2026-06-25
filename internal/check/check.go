@@ -66,6 +66,12 @@ func (r Runner) now() time.Time {
 // reports the result. A non-zero exit or a timeout is a failed Result, not an error; the
 // error return is reserved for infrastructure faults (e.g. the log could not be written).
 func (r Runner) Run(id string, spec Spec) (Result, error) {
+	return r.RunContext(context.Background(), id, spec)
+}
+
+// RunContext executes spec like Run, using ctx as the parent cancellation signal. When
+// spec.Timeout is set, the command is canceled by whichever happens first: ctx or timeout.
+func (r Runner) RunContext(ctx context.Context, id string, spec Spec) (Result, error) {
 	if spec.Cmd == "" {
 		return Result{}, errors.New("check: empty command (manual checks are not run by the runner)")
 	}
@@ -75,14 +81,17 @@ func (r Runner) Run(id string, spec Spec) (Result, error) {
 		dir = filepath.Join(r.Root, spec.Cwd)
 	}
 
-	ctx := context.Background()
+	runCtx := ctx
+	if runCtx == nil {
+		runCtx = context.Background()
+	}
+	var timeoutCancel context.CancelFunc
 	if spec.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, spec.Timeout)
-		defer cancel()
+		runCtx, timeoutCancel = context.WithTimeout(runCtx, spec.Timeout)
+		defer timeoutCancel()
 	}
 
-	cmd := exec.CommandContext(ctx, "sh", "-c", spec.Cmd)
+	cmd := exec.CommandContext(runCtx, "sh", "-c", spec.Cmd)
 	cmd.Dir = dir
 	// Run the command in its own process group so a timeout kills children too, not
 	// just the sh that spawned them.
@@ -99,7 +108,7 @@ func (r Runner) Run(id string, spec Spec) (Result, error) {
 	res := Result{Output: out.String(), Duration: r.now().Sub(start)}
 
 	switch {
-	case ctx.Err() == context.DeadlineExceeded:
+	case runCtx.Err() == context.DeadlineExceeded:
 		res.TimedOut = true
 		res.ExitCode = -1
 		res.Reason = fmt.Sprintf("timed out after %s", spec.Timeout)

@@ -3,7 +3,18 @@ task: PROJ-2ap21ckzvv
 attempt: att_ba386bc76686674c3b2b6bc0
 actor: agent:claude
 client: claude
-status: active
+status: finished
 idempotency_key: connect-disconnect-2026-06-25
 started_at: 2026-06-25T12:06:05.35506Z
 branch: main
+ended_at: 2026-06-25T12:09:12Z
+summary: |-
+  Added Disconnect — the reverse of Connect — so users can cleanly remove cairn from an agent.
+
+  Backend: new format.remove(existing) on every adapter strips ONLY the cairn entry and re-encodes, preserving all other servers/keys; emptied parent maps/tables are pruned so no stray `mcpServers: {}` / `[mcp_servers]` header is left. connect.Disconnect(agentID, repo): no-op when the file is absent or has no cairn entry, otherwise atomic write + <path>.bak + verify-the-entry-is-gone. New endpoint DELETE /api/connect/{agent}?path=.
+
+  Frontend: useDisconnectAgent hook; connected auto-cards show an Unplug ghost icon-button beside Reconnect (red on hover, tooltip explains it removes cairn from that agent's config). Disconnect invalidates detection so the card flips back to its Connect state.
+
+  Tests: TestDisconnectRemovesOnlyCairnAndKeepsSiblings, TestDisconnectMissingFileIsNoop. make check + pnpm web build green. Live-verified via cairn web: connect added cairn beside a pre-existing `other` server; DELETE removed only cairn (kept `other`), wrote .bak, and detection returned connected:false.
+
+  Also rebuilt with the single-column card layout per user request. Standing caveats unchanged (Codex TOML cosmetic empty-table header is now avoided on remove but still emitted on connect; desktop sidecar-path embedding not yet exercised in the packaged Tauri app; Antigravity remains manual pending path confirmation).
