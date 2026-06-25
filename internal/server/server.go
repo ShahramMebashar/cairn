@@ -182,6 +182,17 @@ func (s *Server) resolveRoot(raw string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	base := expandHome(s.defaultRoot)
+	baseAbs, err := filepath.Abs(base)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(baseAbs, abs)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return "", fmt.Errorf("path must be within server root: %s", baseAbs)
+	}
+
 	if fi, err := os.Stat(abs); err != nil || !fi.IsDir() {
 		return "", fmt.Errorf("no such folder: %s", abs)
 	}
