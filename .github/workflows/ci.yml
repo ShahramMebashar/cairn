@@ -81,7 +81,10 @@ jobs:
         working-directory: web
       - run: pnpm install --frozen-lockfile
         working-directory: desktop
-      # Compiles the Rust shell + runs beforeBuildCommand (UI + sidecar) but skips
-      # the installer — catches desktop breakage on every PR without the full bundle cost.
-      - run: pnpm tauri:build -- --no-bundle
-        working-directory: desktop
+      # Mirror Tauri's beforeBuildCommand, then compile the Rust shell without running
+      # the platform bundler/installer. `tauri build --no-bundle` is not stable across
+      # CLI versions and can be forwarded to cargo as an unknown flag.
+      - run: pnpm build
+        working-directory: web
+      - run: node scripts/build-sidecar.mjs
+      - run: cargo build --manifest-path desktop/src-tauri/Cargo.toml
