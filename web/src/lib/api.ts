@@ -173,6 +173,11 @@ export const listTaskSessions = (path: string, id: string) =>
     (r) => r.sessions ?? [],
   );
 
+export const listSessions = (path: string) =>
+  req<{ sessions: AgentSession[] }>("GET", `/api/sessions?path=${enc(path)}`).then(
+    (r) => r.sessions ?? [],
+  );
+
 export const attestTask = (path: string, id: string, index: number, pass: boolean) =>
   req<Task>("POST", `/api/tasks/${id}/attest?path=${enc(path)}`, { index, pass });
 

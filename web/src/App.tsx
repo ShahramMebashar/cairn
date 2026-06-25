@@ -16,7 +16,7 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { CaptureView } from "@/components/CaptureView";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { useStatus, useTaskEvents } from "@/lib/queries";
-import { useDesktopMenu, useTrayBadge, useUpdater } from "@/lib/desktop-hooks";
+import { useDesktopMenu, useTrayMenu, useUpdater } from "@/lib/desktop-hooks";
 import { isTauri, pickFolder } from "@/lib/tauri";
 import {
   forget,
@@ -221,13 +221,21 @@ function Workspace({
 
   useTaskEvents(path); // live board/task updates from any actor via SSE
 
-  // Desktop integration (no-ops in the browser): tray badge, update checks, native menu.
-  useTrayBadge(path);
+  // Desktop integration (no-ops in the browser): live tray menu, update checks, native menu.
   const checkUpdates = useUpdater();
   const openFolder = async () => {
     const picked = await pickFolder();
     if (picked) window.location.hash = `#/${registerWorkspace(picked)}/all`;
   };
+  useTrayMenu(path, {
+    openTask: (id) => navigate({ kind: "task", id }),
+    openFilter: (f) => navigate({ kind: "list", filter: f as Filter }),
+    switchProject: (slug) => {
+      window.location.hash = `#/${slug}/all`;
+    },
+    newTask,
+    openSettings: () => setSettingsOpen(true),
+  });
   useDesktopMenu({
     "menu:new_task": newTask,
     "menu:open_folder": () => void openFolder(),

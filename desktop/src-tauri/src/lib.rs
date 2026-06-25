@@ -3,8 +3,8 @@ use std::net::{SocketAddr, TcpStream};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::menu::{CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+use tauri::tray::TrayIconBuilder;
 use tauri::{Emitter, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
 
 /// Preferred listen address for the bundled server. The Go side falls back to the
@@ -156,7 +156,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![set_tray_badge])
+        .invoke_handler(tauri::generate_handler![update_tray])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
@@ -171,23 +171,59 @@ pub fn run() {
         });
 }
 
-/// Update the tray tooltip (and macOS menubar title) with the awaiting-review count.
-/// Called from the frontend, which knows the open workspace and its tasks.
+/// A tray menu pushed from the frontend. Rust is a dumb renderer: the UI owns the content
+/// and the click logic (clicks come back as a single `tray:menu` event carrying the item id).
+#[derive(serde::Deserialize)]
+struct TrayItem {
+    id: String,
+    label: String,
+    checked: Option<bool>,
+    enabled: Option<bool>,
+}
+
+#[derive(serde::Deserialize)]
+struct TrayMenu {
+    tooltip: String,
+    title: String,
+    sections: Vec<Vec<TrayItem>>,
+}
+
+/// Rebuild the tray menu from a frontend-supplied model + set the tooltip / macOS menubar
+/// title (the attention badge). Sections are separated by a divider.
 #[tauri::command]
-fn set_tray_badge(app: tauri::AppHandle, count: i64) {
-    if let Some(tray) = app.tray_by_id("main") {
-        let tip = if count > 0 {
-            format!("Cairn — {count} awaiting review")
-        } else {
-            "Cairn".to_string()
-        };
-        let _ = tray.set_tooltip(Some(tip));
-        #[cfg(target_os = "macos")]
-        {
-            let title = if count > 0 { count.to_string() } else { String::new() };
-            let _ = tray.set_title(Some(title));
+fn update_tray(app: tauri::AppHandle, menu: TrayMenu) -> Result<(), String> {
+    let Some(tray) = app.tray_by_id("main") else {
+        return Ok(());
+    };
+    let mut b = MenuBuilder::new(&app);
+    for (i, section) in menu.sections.iter().enumerate() {
+        if i > 0 {
+            b = b.separator();
+        }
+        for item in section {
+            if let Some(checked) = item.checked {
+                let ci = CheckMenuItemBuilder::with_id(&item.id, &item.label)
+                    .checked(checked)
+                    .build(&app)
+                    .map_err(|e| e.to_string())?;
+                b = b.item(&ci);
+            } else {
+                let mi = MenuItemBuilder::with_id(&item.id, &item.label)
+                    .enabled(item.enabled.unwrap_or(true))
+                    .build(&app)
+                    .map_err(|e| e.to_string())?;
+                b = b.item(&mi);
+            }
         }
     }
+    let built = b.build().map_err(|e| e.to_string())?;
+    tray.set_menu(Some(built)).map_err(|e| e.to_string())?;
+    let _ = tray.set_tooltip(Some(&menu.tooltip));
+    #[cfg(target_os = "macos")]
+    {
+        let _ = tray.set_title(Some(&menu.title));
+    }
+    Ok(())
 }
 
 /// Build the application menu. The Edit submenu is what gives macOS webviews working
@@ -251,8 +287,8 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::
 /// Map a menu/tray item id to a UI event (or a direct action).
 fn handle_menu(app: &tauri::AppHandle, id: &str) {
     match id {
-        "tray_open" => show_main(app),
-        "tray_quit" => app.exit(0),
+        "tray_open" | "open" => show_main(app),
+        "tray_quit" | "quit" => app.exit(0),
         "new_task" | "tray_new_task" => {
             show_main(app);
             let _ = app.emit("menu:new_task", ());
@@ -277,11 +313,19 @@ fn handle_menu(app: &tauri::AppHandle, id: &str) {
             show_main(app);
             let _ = app.emit("menu:check_updates", ());
         }
-        _ => {}
+        // Dynamic tray items (task:<id>, filter:<f>, project:<slug>, capture, toggle:dnd, …):
+        // the frontend owns the action. Toggles shouldn't steal focus; everything else reveals.
+        other => {
+            if !other.starts_with("toggle:") {
+                show_main(app);
+            }
+            let _ = app.emit("tray:menu", other);
+        }
     }
 }
 
-/// Tray icon: left-click shows the window; the menu mirrors the key actions + Quit.
+/// Tray icon: left-click opens the live menu (built by the frontend via update_tray); the
+/// default menu below is the pre-hydration fallback. "Open Cairn" reveals the window.
 fn build_tray(app: &mut tauri::App) -> tauri::Result<()> {
     let open_i = MenuItemBuilder::with_id("tray_open", "Open Cairn").build(app)?;
     let new_i = MenuItemBuilder::with_id("tray_new_task", "New Task").build(app)?;
@@ -302,18 +346,8 @@ fn build_tray(app: &mut tauri::App) -> tauri::Result<()> {
         .icon(icon)
         .tooltip("Cairn")
         .menu(&tray_menu)
-        .show_menu_on_left_click(false)
+        .show_menu_on_left_click(true)
         .on_menu_event(|app, event| handle_menu(app, event.id().as_ref()))
-        .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                show_main(tray.app_handle());
-            }
-        })
         .build(app)?;
     Ok(())
 }

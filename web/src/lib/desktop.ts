@@ -4,16 +4,42 @@ import { isTauri } from "@/lib/tauri";
 
 export { isTauri };
 
-// --- Tray badge (awaiting-review count) ---------------------------------------------
+// --- Live tray menu -----------------------------------------------------------------
 
-export async function setTrayBadge(count: number): Promise<void> {
+export type TrayItem = { id: string; label: string; checked?: boolean; enabled?: boolean };
+export type TrayMenuModel = { tooltip: string; title: string; sections: TrayItem[][] };
+
+// updateTray pushes a full menu model to the native tray (Rust rebuilds it). Clicks come
+// back via onTrayEvent. No-op outside the desktop app.
+export async function updateTray(menu: TrayMenuModel): Promise<void> {
   if (!isTauri()) return;
   try {
     const { invoke } = await import("@tauri-apps/api/core");
-    await invoke("set_tray_badge", { count });
+    await invoke("update_tray", { menu });
   } catch {
     // best-effort; tray may not be ready yet
   }
+}
+
+// onTrayEvent subscribes to tray menu-item clicks; the payload is the item id. Returns an
+// unsubscribe fn.
+export async function onTrayEvent(handler: (id: string) => void): Promise<() => void> {
+  if (!isTauri()) return () => {};
+  const { listen } = await import("@tauri-apps/api/event");
+  const un = await listen<string>("tray:menu", (e) => handler(e.payload));
+  return () => un();
+}
+
+// --- Do Not Disturb -----------------------------------------------------------------
+
+const DND_KEY = "cairn-dnd";
+
+export function dndEnabled(): boolean {
+  return localStorage.getItem(DND_KEY) === "on";
+}
+
+export function setDnd(on: boolean): void {
+  localStorage.setItem(DND_KEY, on ? "on" : "off");
 }
 
 // --- OS notifications ---------------------------------------------------------------
@@ -31,7 +57,7 @@ export function setOsNotifEnabled(on: boolean): void {
 // notify shows an OS notification when running in the desktop app and the user hasn't
 // turned them off. Permission is requested lazily on first use.
 export async function notify(title: string, body: string): Promise<void> {
-  if (!isTauri() || !osNotifEnabled()) return;
+  if (!isTauri() || !osNotifEnabled() || dndEnabled()) return;
   try {
     const n = await import("@tauri-apps/plugin-notification");
     let granted = await n.isPermissionGranted();
