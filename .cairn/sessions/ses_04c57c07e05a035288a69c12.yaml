@@ -1,0 +1,18 @@
+id: ses_04c57c07e05a035288a69c12
+task: PROJ-2apf7aebwq
+attempt: att_04c57c07e05a035288a69c12
+actor: agent:claude
+client: claude
+status: finished
+idempotency_key: docs-download-2026-06-25
+started_at: 2026-06-25T14:56:28.53461Z
+branch: main
+ended_at: 2026-06-25T14:58:45Z
+summary: |-
+  Updated the docs + README to lead with downloading the desktop app (now that v0.1.0 installers are live), instead of building from source.
+
+  - docs/index.md: added a primary "Download" hero button → releases/latest (Get started / Connect / GitHub moved to secondary); reworded the "Run it however you like" feature card to mention downloading for macOS/Windows/Linux.
+  - docs/installation.md: dropped the build-centric Requirements section; new intro tells users they just download (no toolchain). New "## Desktop app (recommended)" section: a Download link + a per-OS table (macOS signed .dmg per arch; Windows NSIS .exe with the SmartScreen "More info → Run anyway" note; Linux AppImage/.deb with run hints) + an auto-update note. Renamed the from-source path to "## Build from source" with Go/Node/Rust requirements folded in and a link to the shell note.
+  - README.md: added a bold Download link to the header link row and changed the run-it-your-way table's "installers coming to Releases" to a live Download link.
+
+  Docs build clean. Honest note: the per-OS table uses generic asset names (Cairn_<ver>_…) since tauri-action versions the filenames; the Download links all point at releases/latest where users pick the file — robust across versions. Windows row reflects it's unsigned (SmartScreen) until SignPath is wired (tracked separately).

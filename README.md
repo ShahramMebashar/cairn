@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/ShahramMebashar/cairn/releases/latest"><strong>Download</strong></a> ·
   <a href="https://shahrammebashar.github.io/cairn/">Documentation</a> ·
   <a href="https://shahrammebashar.github.io/cairn/agents/">Connect an agent</a> ·
   <a href="SPEC.md">SPEC</a> ·
@@ -50,9 +51,9 @@ Full walkthrough: **[Installation](https://shahrammebashar.github.io/cairn/insta
 
 ## Run it your way
 
-| | Command | Use it for |
+| | How | Use it for |
 | --- | --- | --- |
-| Desktop app | `make desktop` | A native window + tray (installers coming to Releases) |
+| Desktop app | [**Download**](https://github.com/ShahramMebashar/cairn/releases/latest) (macOS / Windows / Linux) | A native window + tray; auto-updates |
 | Web UI | `cairn web --repo .` | The board in your browser |
 | MCP server | `cairn serve --actor agent:x --repo .` | Headless, launched by an agent |
 

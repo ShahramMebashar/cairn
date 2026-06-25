@@ -11,6 +11,9 @@ hero:
     alt: cairn
   actions:
     - theme: brand
+      text: Download
+      link: https://github.com/ShahramMebashar/cairn/releases/latest
+    - theme: alt
       text: Get started
       link: /introduction
     - theme: alt
@@ -29,7 +32,7 @@ features:
   - title: Connect any agent in one click
     details: The Connect page detects installed agents (Claude, Cursor, Codex, Windsurf, OpenCode, Kilo, Pi…) and writes their MCP config for you — each under its own identity.
   - title: Run it however you like
-    details: A native desktop app with a live tray, a browser UI, or a headless MCP server — all the same binary. Build the app with make desktop, or just run cairn web.
+    details: A native desktop app with a live tray, a browser UI, or a headless MCP server — all the same binary. Download the app for macOS, Windows, or Linux, or run cairn web.
 ---
 
 ![The cairn task board, graph, and Connect page](/app-screenshot.png)

@@ -4,47 +4,40 @@ title: Installation
 
 # Installation
 
-## Requirements
+Just want to use cairn? **[Download the desktop app](#desktop-app-recommended)** — no toolchain
+needed. The rest of this page covers building from source (for the CLI, a headless server, or
+developing cairn itself).
 
-- **Go 1.25+** to build the binary.
-- **POSIX shell (`sh`)** to run task checks. macOS and Linux work out of the box; on Windows
-  use WSL or Git Bash, or set [`CAIRN_SHELL`](/guides/checks-and-gates#the-shell) to a shell on
-  your `PATH`.
-- **Node 18+** only if you want to build the web UI, the desktop app, or these docs from source.
-- **Rust toolchain** only to build the desktop app (Tauri).
+## Desktop app (recommended)
 
-## Desktop app
+The easiest way to run cairn is the desktop app — a small native window with a live menu-bar
+tray that bundles the web UI and the `cairn` engine together. It's the same thing `cairn web`
+serves, just native, and it configures agents, fires notifications, and stays in your tray.
 
-The easiest way to run cairn is the desktop app — a small cross-platform window with a live
-menu-bar tray that bundles the web UI and the `cairn` binary together. It's the same thing
-`cairn web` serves, just native, and it can configure agents, fire notifications, and stay in
-your tray.
+**[Download the latest release →](https://github.com/ShahramMebashar/cairn/releases/latest)**
+and grab the installer for your OS:
 
-::: warning Prebuilt installers — placeholder
-Signed installers aren't published yet. Build from source for now (below). Once the first
-version is tagged, installers for macOS, Linux, and Windows will appear on the
-[Releases page](https://github.com/ShahramMebashar/cairn/releases) and update themselves in
-place.
+| OS | Download | Notes |
+| --- | --- | --- |
+| **macOS** | `Cairn_<ver>_aarch64.dmg` (Apple Silicon) or `_x64.dmg` (Intel) | Signed & notarized — opens normally. |
+| **Windows** | `Cairn_<ver>_x64-setup.exe` (NSIS) | Not code-signed yet — SmartScreen shows "unknown publisher"; click **More info → Run anyway**. |
+| **Linux** | `Cairn_<ver>_amd64.AppImage` or `_amd64.deb` | AppImage: `chmod +x` then run. `.deb`: `sudo dpkg -i`. |
+
+The app **auto-updates** in place — once installed, new releases are picked up automatically.
+
+::: tip
+Everything below (building from source, the CLI, headless MCP) is optional — only needed if
+you're developing cairn itself or running it on a server. To just use cairn, download above.
 :::
 
-Build the installer for your OS:
+## Build from source
 
-```sh
-make desktop       # -> native installer (.dmg / .AppImage / .msi)
-```
+Prefer the command line or a headless server, or developing cairn itself? Build the binary —
+the desktop app bundles this same binary as a sidecar.
 
-This packages the app with [Tauri](https://tauri.app): it builds the web UI, compiles the
-`cairn` binary as a bundled **sidecar**, and wraps both in a native shell. To iterate without
-packaging:
-
-```sh
-make desktop-dev   # native window against a dev server (run `make web` alongside)
-```
-
-Prefer the command line or a headless server? Build the `cairn` binary from source and run it
-directly (the desktop app bundles this same binary as a sidecar).
-
-## Build the binary
+**You'll need:** **Go 1.25+** (the binary); **Node 18+** (the embedded web UI); and a **Rust
+toolchain** (only for `make desktop`). Task checks run via a POSIX shell — see
+[Checks & gates → The shell](/guides/checks-and-gates#the-shell) for the Windows note.
 
 ```sh
 make build        # -> bin/cairn
@@ -57,7 +50,12 @@ go build -o bin/cairn ./cmd/cairn
 ```
 
 That single binary is everything: the MCP server (`cairn serve`), the web server
-(`cairn web`), and the workspace scaffolder (`cairn init`).
+(`cairn web`), and the workspace scaffolder (`cairn init`). To build the desktop app yourself:
+
+```sh
+make desktop       # -> native installer (.dmg / .exe / .AppImage / .deb)
+make desktop-dev   # native window against a dev server (run `make web` alongside)
+```
 
 ## Initialize a repo
 
