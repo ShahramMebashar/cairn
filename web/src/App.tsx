@@ -17,7 +17,7 @@ import { CaptureView } from "@/components/CaptureView";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { useStatus, useTaskEvents } from "@/lib/queries";
 import { useDesktopMenu, useTrayBadge, useUpdater } from "@/lib/desktop-hooks";
-import { pickFolder } from "@/lib/tauri";
+import { isTauri, pickFolder } from "@/lib/tauri";
 import {
   forget,
   lastWorkspace,
@@ -35,11 +35,33 @@ function isCaptureRoute(): boolean {
   return window.location.hash.replace(/^#\/?/, "") === "capture";
 }
 
+// macOS uses a frameless window (titleBarStyle: Overlay) — the traffic lights float over a
+// slim draggable strip, Linear-style. Other platforms keep their native title bar.
+function isMacDesktop(): boolean {
+  return isTauri() && typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent);
+}
+
+// TitleBar is the draggable region that replaces the native title bar on macOS. The OS
+// renders the traffic lights over its left; the rest drags the window.
+function TitleBar() {
+  if (!isMacDesktop()) return null;
+  return <div data-tauri-drag-region className="h-7 shrink-0 bg-app" />;
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider delayDuration={200}>
-        {isCaptureRoute() ? <CaptureView /> : <Flow />}
+        {isCaptureRoute() ? (
+          <CaptureView />
+        ) : (
+          <div className="flex h-screen flex-col bg-app">
+            <TitleBar />
+            <div className="min-h-0 flex-1">
+              <Flow />
+            </div>
+          </div>
+        )}
         <Toaster richColors />
       </TooltipProvider>
     </QueryClientProvider>
@@ -216,7 +238,7 @@ function Workspace({
   });
 
   return (
-    <div className="flex h-screen overflow-hidden bg-app text-foreground">
+    <div className="flex h-full overflow-hidden bg-app text-foreground">
       <AppSidebar
         path={path}
         status={status}
@@ -295,7 +317,7 @@ function Workspace({
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
+    <div className="flex h-full items-center justify-center bg-background p-6 text-foreground">
       {children}
     </div>
   );

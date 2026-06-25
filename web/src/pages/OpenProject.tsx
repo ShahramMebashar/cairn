@@ -62,7 +62,7 @@ export function OpenProject({
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
+    <div className="flex h-full items-center justify-center bg-background p-6 text-foreground">
       <div className="w-full max-w-md">
         <div className="mb-6 flex items-center gap-3">
           <span className="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground">
