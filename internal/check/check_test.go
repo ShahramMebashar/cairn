@@ -18,6 +18,7 @@ func runner(t *testing.T) Runner {
 
 func TestRunPass(t *testing.T) {
 	r := runner(t)
+	r.GitHead = "abc123"
 	res, err := r.Run("PROJ-001", Spec{Cmd: "exit 0"})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -30,6 +31,13 @@ func TestRunPass(t *testing.T) {
 	}
 	if _, err := os.Stat(res.LogPath); err != nil {
 		t.Fatalf("log not written: %v", err)
+	}
+	b, err := os.ReadFile(res.LogPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "head: abc123\n") {
+		t.Fatalf("log missing git head:\n%s", b)
 	}
 }
 

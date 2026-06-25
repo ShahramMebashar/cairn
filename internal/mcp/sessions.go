@@ -10,12 +10,13 @@ import (
 	"slices"
 	"strings"
 
+	"cairn/internal/gitctx"
 	"cairn/internal/session"
 	"cairn/internal/store"
 	"cairn/internal/task"
 )
 
-const ServiceVersion = "0.1.0"
+const ServiceVersion = "0.2.0"
 
 const (
 	ExecutionActive         = "active"
@@ -93,6 +94,16 @@ func (svc *Service) BeginSession(ctx context.Context, in BeginSessionInput) (Ses
 	}
 
 	startedAt := svc.now().UTC()
+	if in.Branch == "" || in.Head == "" {
+		if ref, err := gitctx.Current(ctx, svc.store.Root()); err == nil {
+			if in.Branch == "" {
+				in.Branch = ref.Branch
+			}
+			if in.Head == "" {
+				in.Head = ref.Head
+			}
+		}
+	}
 	sessionID := stableSessionID("ses_", in.TaskID, svc.actor, in.IdempotencyKey)
 	attemptID := stableSessionID("att_", in.TaskID, svc.actor, in.IdempotencyKey)
 	var result *store.SessionDoc
@@ -234,6 +245,11 @@ func (svc *Service) Heartbeat(ctx context.Context, in HeartbeatInput) (SessionVi
 // FinishSession records a final summary and moves the task into review when configured.
 func (svc *Service) FinishSession(ctx context.Context, in FinishSessionInput) (SessionView, error) {
 	var result *store.SessionDoc
+	if in.Head == "" {
+		if ref, err := gitctx.Current(ctx, svc.store.Root()); err == nil {
+			in.Head = ref.Head
+		}
+	}
 	err := svc.store.Write(ctx, svc.actor, "finish session", func(tx *store.WriteTx) error {
 		d, err := tx.GetSession(in.SessionID)
 		if err != nil {

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   ArrowLeft,
+  AlertTriangle,
   Bot,
   Check as CheckMark,
   ChevronRight,
@@ -8,6 +9,9 @@ import {
   CircleCheck,
   CircleX,
   CornerLeftUp,
+  FileText,
+  GitBranch,
+  GitCommit,
   Link2,
   Loader2,
   MoreHorizontal,
@@ -65,13 +69,14 @@ import {
   useRunChecks,
   useRuns,
   useTask,
+  useTaskGitContext,
   useTaskSessions,
   useTasks,
   useTransition,
   useUpdateTask,
 } from "@/lib/queries";
 import { cn, initials, statusLabel, timeAgo } from "@/lib/utils";
-import type { Check, Run, Status, Task } from "@/lib/api";
+import type { ChangedFile, Check, GitCommit as GitCommitData, Run, SessionGitContext, Status, Task } from "@/lib/api";
 
 export function TaskDetail({
   path,
@@ -92,6 +97,7 @@ export function TaskDetail({
   const { data: runs } = useRuns(path, id);
   const { data: allTasks } = useTasks(path);
   const { data: sessions, isLoading: sessionsLoading } = useTaskSessions(path, id);
+  const { data: gitContexts, isLoading: gitContextLoading } = useTaskGitContext(path, id);
   const claim = useClaim(path);
   const transition = useTransition(path);
   const runChecks = useRunChecks(path);
@@ -240,6 +246,8 @@ export function TaskDetail({
                 executionState={task.executionState}
                 loading={sessionsLoading}
               />
+
+              <CodeContextPanel sessions={gitContexts ?? []} loading={gitContextLoading} />
 
               {/* Activity */}
               <section className="mt-10">
@@ -469,6 +477,164 @@ function Prop({
       {children}
     </div>
   );
+}
+
+function CodeContextPanel({
+  sessions,
+  loading,
+}: {
+  sessions: SessionGitContext[];
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <section className="mt-8">
+        <h2 className="text-xs font-medium text-muted-foreground">Code context</h2>
+        <div className="mt-3 space-y-2">
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-14 w-full" />
+        </div>
+      </section>
+    );
+  }
+  if (sessions.length === 0) return null;
+
+  return (
+    <section className="mt-8">
+      <h2 className="text-xs font-medium text-muted-foreground">Code context</h2>
+      <div className="mt-3 space-y-2">
+        {sessions.map(({ session, context }) => (
+          <article key={session.id} className="rounded-lg border bg-background px-3.5 py-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <GitBranch className="size-3.5 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                {context.branch || session.branch || "Detached HEAD"}
+              </span>
+              <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal">
+                {session.status}
+              </Badge>
+            </div>
+
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+              {context.headStarted && <Ref label="start" value={context.headStarted} />}
+              {context.headFinished && <Ref label="finish" value={context.headFinished} />}
+              {!context.headFinished && context.currentHead && <Ref label="current" value={context.currentHead} />}
+            </div>
+
+            {!context.available ? (
+              <WarningList messages={[context.error || "Git context is unavailable."]} />
+            ) : (
+              <>
+                {(context.warnings ?? []).length > 0 && (
+                  <WarningList messages={(context.warnings ?? []).map((w) => w.message)} />
+                )}
+                <FileList title="Files changed" files={context.filesChanged ?? []} />
+                <CommitList commits={context.commits ?? []} />
+                <FileList title="Uncommitted" files={context.uncommitted ?? []} mutedEmpty />
+              </>
+            )}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Ref({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="flex items-center gap-1">
+      <span>{label}</span>
+      <span className="font-mono text-foreground">{shortSha(value)}</span>
+    </span>
+  );
+}
+
+function WarningList({ messages }: { messages: string[] }) {
+  return (
+    <div className="mt-2 space-y-1.5">
+      {messages.map((message) => (
+        <div
+          key={message}
+          className="flex gap-2 rounded-md border bg-muted/40 px-2.5 py-2 text-xs text-muted-foreground"
+        >
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+          <span>{message}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FileList({
+  title,
+  files,
+  mutedEmpty = false,
+}: {
+  title: string;
+  files: ChangedFile[];
+  mutedEmpty?: boolean;
+}) {
+  if (files.length === 0) {
+    if (mutedEmpty) return null;
+    return (
+      <div className="mt-3 text-xs text-muted-foreground">
+        <span className="font-medium">{title}</span>: none
+      </div>
+    );
+  }
+  return (
+    <div className="mt-3">
+      <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <FileText className="size-3.5" />
+        {title}
+      </div>
+      <div className="space-y-1">
+        {files.slice(0, 8).map((file) => (
+          <div
+            key={`${file.status}:${file.oldPath ?? ""}:${file.path}`}
+            className="flex min-w-0 items-center gap-2 text-xs"
+          >
+            <Badge variant="outline" className="h-5 w-8 justify-center px-0 font-mono text-[10px]">
+              {file.status}
+            </Badge>
+            <span className="min-w-0 truncate font-mono text-muted-foreground">
+              {file.oldPath ? `${file.oldPath} -> ${file.path}` : file.path}
+            </span>
+          </div>
+        ))}
+        {files.length > 8 && (
+          <div className="text-xs text-muted-foreground">+{files.length - 8} more</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CommitList({ commits }: { commits: GitCommitData[] }) {
+  if (commits.length === 0) return null;
+  return (
+    <div className="mt-3">
+      <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <GitCommit className="size-3.5" />
+        Commits
+      </div>
+      <div className="space-y-1">
+        {commits.slice(0, 6).map((commit) => (
+          <div key={commit.hash} className="flex min-w-0 items-center gap-2 text-xs">
+            <span className="font-mono text-muted-foreground">{shortSha(commit.hash)}</span>
+            <span className="min-w-0 truncate">{commit.subject}</span>
+          </div>
+        ))}
+        {commits.length > 6 && (
+          <div className="text-xs text-muted-foreground">+{commits.length - 6} more</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function shortSha(value: string) {
+  return value.length > 7 ? value.slice(0, 7) : value;
 }
 
 // checkStatus maps a check's result (and whether a run is in flight) to its icon and pill

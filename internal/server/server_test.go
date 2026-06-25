@@ -24,6 +24,7 @@ type runResp struct {
 		At       string `json:"at"`
 		Cmd      string `json:"cmd"`
 		Cwd      string `json:"cwd"`
+		Head     string `json:"head"`
 		Exit     int    `json:"exit"`
 		TimedOut bool   `json:"timedout"`
 		Duration string `json:"duration"`
@@ -48,7 +49,7 @@ func TestRunsEndpointParsesLogsNewestFirst(t *testing.T) {
 	write("WEB-001-20260621-185736.523.log",
 		"cmd: echo old\ncwd: /repo\nexit: 1  timedout: false  duration: 500ms\n----\nold output\n")
 	write("WEB-001-20260621-190000.000.log",
-		"cmd: echo new\ncwd: /repo\nexit: 0  timedout: false  duration: 1.2s\n----\nnew output\n")
+		"cmd: echo new\ncwd: /repo\nhead: abc123\nexit: 0  timedout: false  duration: 1.2s\n----\nnew output\n")
 	// A different task's log must not leak into WEB-001's runs.
 	write("WEB-002-20260621-190001.000.log",
 		"cmd: nope\ncwd: /repo\nexit: 0  timedout: false  duration: 1s\n----\n")
@@ -61,6 +62,9 @@ func TestRunsEndpointParsesLogsNewestFirst(t *testing.T) {
 	newest := resp.Runs[0]
 	if newest.Cmd != "echo new" || newest.Exit != 0 || newest.Output != "new output\n" {
 		t.Fatalf("newest run: %+v", newest)
+	}
+	if newest.Head != "abc123" {
+		t.Fatalf("newest Head: %q", newest.Head)
 	}
 	if newest.At != "2026-06-21T19:00:00Z" {
 		t.Fatalf("newest At: %q", newest.At)

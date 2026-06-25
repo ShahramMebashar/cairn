@@ -1,0 +1,13 @@
+id: ses_821edc849d2bbae823278a40
+task: PROJ-2apxkgd2my
+attempt: att_821edc849d2bbae823278a40
+actor: agent:codex
+client: codex
+model: gpt-5
+status: finished
+idempotency_key: codex-PROJ-2apxkgd2my-20260625-1846
+started_at: 2026-06-25T18:48:00.821843Z
+branch: main
+head_started: ca883c917b0b12ecd648672a2d54bd54d1e62a4d
+ended_at: 2026-06-25T19:08:38Z
+summary: 'Implemented Git anchor capture: added `internal/gitctx`, auto-filled session begin/finish refs when omitted, recorded check-run `head:` metadata, parsed it in the runs API, and covered the parser/log behavior with tests. Verified with `make check` and `cd web && pnpm build`.'

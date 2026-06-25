@@ -1,0 +1,13 @@
+id: ses_283016e38bca2572c433e59e
+task: PROJ-2apxkpxre4
+attempt: att_283016e38bca2572c433e59e
+actor: agent:codex
+client: codex
+model: gpt-5
+status: finished
+idempotency_key: codex-PROJ-2apxkpxre4-20260625-1909
+started_at: 2026-06-25T19:08:55.602925Z
+branch: main
+head_started: ca883c917b0b12ecd648672a2d54bd54d1e62a4d
+ended_at: 2026-06-25T19:09:11Z
+summary: 'Implemented derived Git context: added `internal/gitctx` for direct `git -C` reads, parsed NUL-delimited name/status output, exposed task/session HTTP context endpoints, and derived dirty/no-change/stale-check warnings from session anchors and latest run-log head. Verified with `make check`.'

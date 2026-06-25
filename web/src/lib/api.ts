@@ -56,10 +56,46 @@ export type Run = {
   at?: string;
   cmd?: string;
   cwd?: string;
+  head?: string;
   exit: number;
   timedout: boolean;
   duration?: string;
   output?: string;
+};
+
+export type ChangedFile = {
+  status: string;
+  path: string;
+  oldPath?: string;
+};
+
+export type GitCommit = {
+  hash: string;
+  subject: string;
+};
+
+export type GitWarning = {
+  kind: string;
+  message: string;
+};
+
+export type GitContext = {
+  available: boolean;
+  error?: string;
+  branch?: string;
+  headStarted?: string;
+  headFinished?: string;
+  currentHead?: string;
+  filesChanged?: ChangedFile[];
+  uncommitted?: ChangedFile[];
+  commits?: GitCommit[];
+  dirty: boolean;
+  warnings?: GitWarning[];
+};
+
+export type SessionGitContext = {
+  session: AgentSession;
+  context: GitContext;
 };
 
 export type Task = {
@@ -171,6 +207,12 @@ export const reorderTask = (path: string, id: string, rank: number) =>
 
 export const getRuns = (path: string, id: string) =>
   req<{ runs: Run[] }>("GET", `/api/tasks/${id}/runs?path=${enc(path)}`).then((r) => r.runs ?? []);
+
+export const getTaskGitContext = (path: string, id: string) =>
+  req<{ sessions: SessionGitContext[] }>(
+    "GET",
+    `/api/tasks/${id}/git_context?path=${enc(path)}`,
+  ).then((r) => r.sessions ?? []);
 
 export const listTaskSessions = (path: string, id: string) =>
   req<{ sessions: AgentSession[] }>("GET", `/api/tasks/${id}/sessions?path=${enc(path)}`).then(

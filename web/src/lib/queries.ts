@@ -18,6 +18,7 @@ const integrationsKey = (path: string) => ["integrations", path] as const;
 const taskKey = (path: string, id: string) => ["task", path, id] as const;
 const runsKey = (path: string, id: string) => ["runs", path, id] as const;
 const sessionsKey = (path: string, id?: string) => ["sessions", path, ...(id ? [id] : [])] as const;
+const gitContextKey = (path: string, id: string) => ["git-context", path, id] as const;
 
 // isGatedStatus reports whether entering `to` runs the task's command checks server-side
 // (i.e. the move blocks while checks run). Mirrors the backend gate: closed states or the
@@ -53,6 +54,14 @@ export function useRuns(path: string, id: string | null) {
   return useQuery({
     queryKey: runsKey(path, id ?? ""),
     queryFn: () => api.getRuns(path, id as string),
+    enabled: !!id,
+  });
+}
+
+export function useTaskGitContext(path: string, id: string | null) {
+  return useQuery({
+    queryKey: gitContextKey(path, id ?? ""),
+    queryFn: () => api.getTaskGitContext(path, id as string),
     enabled: !!id,
   });
 }
@@ -96,9 +105,11 @@ export function useTaskEvents(path: string) {
         qc.invalidateQueries({ queryKey: taskKey(path, msg.id) });
         qc.invalidateQueries({ queryKey: runsKey(path, msg.id) });
         qc.invalidateQueries({ queryKey: sessionsKey(path, msg.id) });
+        qc.invalidateQueries({ queryKey: gitContextKey(path, msg.id) });
       }
       if (msg.type === "session-changed") {
         qc.invalidateQueries({ queryKey: sessionsKey(path) });
+        qc.invalidateQueries({ queryKey: ["git-context", path] });
         // Session events carry the session id, not the task id. Refresh open task
         // projections so execution state cannot lag behind the session timeline.
         qc.invalidateQueries({ queryKey: ["task", path] });
@@ -110,7 +121,10 @@ export function useTaskEvents(path: string) {
 
 function refresh(qc: QueryClient, path: string, id?: string) {
   qc.invalidateQueries({ queryKey: tasksKey(path) });
-  if (id) qc.invalidateQueries({ queryKey: taskKey(path, id) });
+  if (id) {
+    qc.invalidateQueries({ queryKey: taskKey(path, id) });
+    qc.invalidateQueries({ queryKey: gitContextKey(path, id) });
+  }
 }
 
 const fail = (e: unknown) => toast.error(e instanceof Error ? e.message : String(e));

@@ -1,0 +1,13 @@
+id: ses_65a3044eee053f620087209e
+task: PROJ-2apxkyvcqd
+attempt: att_65a3044eee053f620087209e
+actor: agent:codex
+client: codex
+model: gpt-5
+status: finished
+idempotency_key: codex-PROJ-2apxkyvcqd-20260625-1909
+started_at: 2026-06-25T19:09:24.035995Z
+branch: main
+head_started: ca883c917b0b12ecd648672a2d54bd54d1e62a4d
+ended_at: 2026-06-25T19:11:35Z
+summary: 'Rendered Code Context in `TaskDetail`: added typed API/query support, task-level context fetching, and a compact panel showing branch, refs, warnings, changed files, commits, and uncommitted files. Verified with `cd web && pnpm build`, `make check`, live endpoint curl, and a browser DOM check showing populated Code Context.'

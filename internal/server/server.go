@@ -15,6 +15,7 @@
 //	GET    /api/tasks/{id}
 //	DELETE /api/tasks/{id}                            -> { id, deleted } ; refused if it has children/dependents
 //	GET    /api/tasks/{id}/runs            -> { runs: [{ file, at, cmd, cwd, exit, timedout, duration, output }] }
+//	GET    /api/tasks/{id}/git_context     -> { sessions: [{ session, context }] }
 //	POST   /api/tasks/{id}/update    { title?, body?, checks?, priority?, labels?, parent? }
 //	POST   /api/tasks/{id}/transition  { to }
 //	POST   /api/tasks/{id}/claim
@@ -77,10 +78,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/tasks/{id}", s.handleGet)
 	mux.HandleFunc("DELETE /api/tasks/{id}", s.handleDelete)
 	mux.HandleFunc("GET /api/tasks/{id}/runs", s.handleRuns)
+	mux.HandleFunc("GET /api/tasks/{id}/git_context", s.handleTaskGitContext)
 	mux.HandleFunc("GET /api/tasks/{id}/sessions", s.handleListTaskSessions)
 	mux.HandleFunc("POST /api/tasks/{id}/sessions/begin", s.handleBeginSession)
 	mux.HandleFunc("GET /api/sessions", s.handleListSessions)
 	mux.HandleFunc("GET /api/sessions/{session}", s.handleGetSession)
+	mux.HandleFunc("GET /api/sessions/{session}/git_context", s.handleSessionGitContext)
 	mux.HandleFunc("POST /api/sessions/{session}/heartbeat", s.handleHeartbeat)
 	mux.HandleFunc("POST /api/sessions/{session}/finish", s.handleFinishSession)
 	mux.HandleFunc("POST /api/sessions/{session}/cancel", s.handleCancelSession)

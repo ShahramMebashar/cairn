@@ -22,6 +22,7 @@ type runDTO struct {
 	At       string `json:"at,omitempty"`
 	Cmd      string `json:"cmd,omitempty"`
 	Cwd      string `json:"cwd,omitempty"`
+	Head     string `json:"head,omitempty"`
 	Exit     int    `json:"exit"`
 	TimedOut bool   `json:"timedout"`
 	Duration string `json:"duration,omitempty"`
@@ -58,6 +59,25 @@ func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"runs": runs})
 }
 
+func latestRunHead(root, id string) string {
+	runsDir := store.New(root).RunsDir()
+	matches, err := filepath.Glob(filepath.Join(runsDir, id+"-*.log"))
+	if err != nil {
+		return ""
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(matches)))
+	for _, path := range matches {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		if head := parseRun(id, filepath.Base(path), string(data)).Head; head != "" {
+			return head
+		}
+	}
+	return ""
+}
+
 // parseRun turns a run-log file into a runDTO. The header format is fixed by
 // check.Runner.writeLog; an unparseable header degrades to the raw body so output
 // is never lost.
@@ -83,6 +103,8 @@ func parseRun(id, file, content string) runDTO {
 			run.Cmd = strings.TrimPrefix(line, "cmd: ")
 		case strings.HasPrefix(line, "cwd: "):
 			run.Cwd = strings.TrimPrefix(line, "cwd: ")
+		case strings.HasPrefix(line, "head: "):
+			run.Head = strings.TrimPrefix(line, "head: ")
 		case strings.HasPrefix(line, "exit: "):
 			fmt.Sscanf(line, "exit: %d  timedout: %t  duration: %s",
 				&run.Exit, &run.TimedOut, &run.Duration)

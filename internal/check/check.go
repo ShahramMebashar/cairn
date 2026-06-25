@@ -43,15 +43,17 @@ type Result struct {
 	Output   string // trailing TailBytes of combined stdout+stderr
 	LogPath  string // path of the written run log
 	Duration time.Duration
+	GitHead  string // commit HEAD observed when the run started, if available
 }
 
 // Runner executes checks rooted at a repo and writes logs under LogDir
 // (e.g. <root>/.cairn/runs). Now is an injectable clock for log filenames; nil uses
 // the wall clock. The zero value is usable when Root/LogDir default to the process cwd.
 type Runner struct {
-	Root   string
-	LogDir string
-	Now    func() time.Time
+	Root    string
+	LogDir  string
+	Now     func() time.Time
+	GitHead string
 	// Shell is the configured shell (config.yaml check_shell). Empty ⇒ sh. The CAIRN_SHELL
 	// env var overrides it.
 	Shell string
@@ -129,7 +131,7 @@ func (r Runner) RunContext(ctx context.Context, id string, spec Spec) (Result, e
 
 	start := r.now()
 	runErr := cmd.Run()
-	res := Result{Output: out.String(), Duration: r.now().Sub(start)}
+	res := Result{Output: out.String(), Duration: r.now().Sub(start), GitHead: r.GitHead}
 
 	switch {
 	case runCtx.Err() == context.DeadlineExceeded:
@@ -163,8 +165,8 @@ func (r Runner) writeLog(id string, spec Spec, dir string, res Result) (string, 
 	}
 	stamp := r.now().UTC().Format("20060102-150405.000")
 	path := filepath.Join(r.LogDir, fmt.Sprintf("%s-%s.log", id, stamp))
-	header := fmt.Sprintf("cmd: %s\ncwd: %s\nexit: %d  timedout: %t  duration: %s\n----\n",
-		spec.Cmd, dir, res.ExitCode, res.TimedOut, res.Duration)
+	header := fmt.Sprintf("cmd: %s\ncwd: %s\nhead: %s\nexit: %d  timedout: %t  duration: %s\n----\n",
+		spec.Cmd, dir, res.GitHead, res.ExitCode, res.TimedOut, res.Duration)
 	if err := os.WriteFile(path, []byte(header+res.Output), 0o644); err != nil {
 		return "", fmt.Errorf("check: write log: %w", err)
 	}

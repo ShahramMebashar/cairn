@@ -11,6 +11,7 @@ import (
 
 	"cairn/internal/check"
 	"cairn/internal/config"
+	"cairn/internal/gitctx"
 	"cairn/internal/session"
 	"cairn/internal/store"
 	"cairn/internal/task"
@@ -412,7 +413,11 @@ func (svc *Service) RunChecksContext(ctx context.Context, id string, only []int)
 // runCmdChecks executes each cmd check (optionally filtered) and records pass/fail on the
 // doc. It mutates but does not save.
 func (svc *Service) runCmdChecks(ctx context.Context, doc *store.Doc, cfg config.Config, only map[int]bool) error {
-	runner := check.Runner{Root: svc.store.Root(), LogDir: svc.store.RunsDir(), Now: svc.now, Shell: cfg.CheckShell}
+	gitHead := ""
+	if ref, err := gitctx.Current(ctx, svc.store.Root()); err == nil {
+		gitHead = ref.Head
+	}
+	runner := check.Runner{Root: svc.store.Root(), LogDir: svc.store.RunsDir(), Now: svc.now, Shell: cfg.CheckShell, GitHead: gitHead}
 	for i, c := range doc.Task.Checks {
 		if only != nil && !only[i] {
 			continue

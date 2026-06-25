@@ -1,7 +1,7 @@
 ---
 id: PROJ-2anwwxtm8m
 title: Deep links + clickable notifications + copy-link + copy-as-agent-prompt
-status: in_review
+status: done
 priority: high
 labels: [desktop, tauri]
 provenance:
@@ -14,6 +14,9 @@ provenance:
   - {who: 'human:shaho', at: '2026-06-25T13:40:52Z', did: attested, text: check 3 pass}
   - {who: 'human:shaho', at: '2026-06-25T13:41:06Z', did: ran checks}
   - {who: 'human:shaho', at: '2026-06-25T13:56:22Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-25T19:15:46Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-25T19:15:59Z', did: ran checks}
+  - {who: 'human:shaho', at: '2026-06-25T19:15:59Z', did: transitioned to done}
 assignee: agent:claude
 active_attempt: att_8a1711eab78b64a4798eb851
 checks:
@@ -25,7 +28,7 @@ checks:
     result: pass
   - desc: Desktop Rust compiles (deep-link plugin + on_open_url)
     cmd: cd desktop/src-tauri && cargo check
-    result: fail
+    result: pass
   - desc: 'GUI: deep link opens the task, copy link + copy-as-agent-prompt work, clickable notification jumps to task (cairn:// scheme registered + routes confirmed at OS level)'
     type: manual
     result: pass

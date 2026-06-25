@@ -9,8 +9,16 @@ defined in `internal/mcp/sessions.go` (`ServiceVersion`) and `desktop/src-tauri/
 
 ## [Unreleased]
 
+## [0.2.0]
+
 ### Added
 
+- **Git-aware review context.** Each session derives review evidence from the checkout —
+  branch, start/finish commits, files changed, commits, and uncommitted state — surfaced on
+  the task detail page with actionable warnings (dirty finish, stale checks, no changes).
+  - `GET /api/tasks/{id}/git_context` and `GET /api/sessions/{session}/git_context`, backed by
+    `internal/gitctx`. `begin`/`finish` capture the HEAD automatically and check runs record the
+    commit they ran against.
 - **One-click agent integrations.** A new **Connect** page detects installed agents and writes
   their MCP config for you, each under its own identity (`agent:<id>`). Auto-connect for Claude
   Code, Cursor, Codex, Windsurf, OpenCode, Kilo Code, and Pi; a copy-paste guide for Antigravity
